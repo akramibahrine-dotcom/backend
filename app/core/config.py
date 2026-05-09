@@ -17,9 +17,9 @@ class Settings(BaseSettings):
 
     # App
     app_env: Literal["development", "production", "test"] = "production"
-    api_base_url: str = "https://api.Baytseha.shop"
-    frontend_base_url: str = "https://Baytseha.shop"
-    cors_origins: str = "https://Baytseha.shop,https://www.Baytseha.shop"
+    api_base_url: str = "https://api.baytseha.shop"
+    frontend_base_url: str = "https://baytseha.shop"
+    cors_origins: str = "https://baytseha.shop,https://www.baytseha.shop"
 
     # Database
     database_url: str = "postgresql+asyncpg://baytseha:baytseha_dev@localhost:5432/baytseha"
@@ -79,7 +79,7 @@ class Settings(BaseSettings):
         return v
 
     def get_cors_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
+        return [o.strip().lower() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
     def is_development(self) -> bool:
