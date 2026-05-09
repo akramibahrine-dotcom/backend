@@ -19,7 +19,10 @@ logger = get_logger(__name__)
 async def lifespan(app: FastAPI):
     if settings.run_migrations_on_start:
         from app.db.migrations import run_migrations_async
-        await run_migrations_async()
+        try:
+            await run_migrations_async()
+        except Exception as exc:
+            logger.error("startup_migrations_failed", error=str(exc))
     logger.info("baytseha_backend_started", env=settings.app_env)
     yield
     logger.info("baytseha_backend_stopped")
