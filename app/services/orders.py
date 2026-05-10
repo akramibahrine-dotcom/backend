@@ -60,11 +60,11 @@ async def generate_public_order_number(db: AsyncSession) -> str:
             return number
 
 
-def _validate_phone(raw_phone: str, test_whitelist: str) -> tuple[str, str, str] | None:
-    """Returns (e164, digits_no_plus, display) or None."""
+def _validate_phone(raw_phone: str, test_whitelist: str) -> tuple[str, str, str, str | None] | None:
+    """Returns (e164, digits_no_plus, display, iso_country) or None."""
     cleaned = re.sub(r"[\s\-\(\).]", "", raw_phone)
     if cleaned == test_whitelist:
-        return cleaned, cleaned, cleaned
+        return cleaned, cleaned, cleaned, None
     return normalize_phone(cleaned)
 
 
@@ -77,7 +77,7 @@ async def validate_order(req: ValidateOrderRequest, request: Request) -> Validat
             error="اكتبي رقم جوال صحيح",
             error_code="invalid_phone",
         )
-    e164, _, local = phone_result
+    _, _, local, _ = phone_result
     return ValidateOrderResponse(valid=True, normalized_phone=local)
 
 
@@ -96,7 +96,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
                 "message": "اكتبي رقم جوال صحيح لإكمال الطلب.",
             },
         )
-    phone_e164, phone_digits, phone_local = phone_result
+    phone_e164, phone_digits, phone_local, phone_iso = phone_result
     wl_raw = settings.test_phone_whitelist.strip()
     wl_digits = wl_raw.lstrip("+").lstrip("0")
     phone_tail = phone_e164.lstrip("+").lstrip("0")
@@ -208,6 +208,39 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             detail={
                 "error": "order_rejected",
                 "message": "عذرًا، لا يمكن إتمام الطلب. إذا كنتِ تعتقدين أن هذا خطأ، تواصلي معنا.",
+            },
+        )
+
+    # Phone country must match IP country (skip for whitelisted test phones)
+    if (
+        not is_test
+        and phone_iso
+        and fraud_result.country_iso_code
+        and fraud_result.country_iso_code != phone_iso
+    ):
+        logger.warning(
+            "phone_ip_country_mismatch",
+            phone_iso=phone_iso,
+            ip_iso=fraud_result.country_iso_code,
+            ip=client_ip,
+        )
+        fraud_check_record = FraudCheck(
+            phone_e164_masked=mask_phone(phone_e164),
+            ip_address=client_ip,
+            decision="rejected",
+            reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{fraud_result.country_iso_code}",
+            country_iso_code=fraud_result.country_iso_code,
+            risk_score=fraud_result.risk_score,
+            ip_risk=fraud_result.ip_risk,
+            raw_response=fraud_result.raw_response,
+        )
+        db.add(fraud_check_record)
+        await db.commit()
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "order_rejected",
+                "message": "رقم الجوال لا يتطابق مع بلد الاتصال. إذا كان هذا خطأ تواصلي معنا.",
             },
         )
 

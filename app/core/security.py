@@ -9,16 +9,18 @@ KSA_MOBILE_PATTERN = re.compile(
 )
 
 COUNTRY_PHONE_PATTERNS: list[tuple[str, re.Pattern, str]] = [
-    ("966", re.compile(r"^(?:\+966|00966|966|0)?5[0-9]{8}$"), "KSA"),
-    ("971", re.compile(r"^(?:\+971|00971|971|0)?5[0-9]{8}$"), "UAE"),
-    ("974", re.compile(r"^(?:\+974|00974|974)?[0-9]{8}$"), "QAT"),
-    ("973", re.compile(r"^(?:\+973|00973|973)?[0-9]{8}$"), "BHR"),
-    ("968", re.compile(r"^(?:\+968|00968|968)?[0-9]{8}$"), "OMN"),
-    ("965", re.compile(r"^(?:\+965|00965|965)?[0-9]{8}$"), "KWT"),
-    ("964", re.compile(r"^(?:\+964|00964|964|0)?7[0-9]{9}$"), "IRQ"),
-    ("961", re.compile(r"^(?:\+961|00961|961|0)?[0-9]{7,8}$"), "LBN"),
-    ("218", re.compile(r"^(?:\+218|00218|218|0)?9[0-9]{8}$"), "LBY"),
+    ("966", re.compile(r"^(?:\+966|00966|966|0)?5[0-9]{8}$"), "SA"),
+    ("971", re.compile(r"^(?:\+971|00971|971|0)?5[0-9]{8}$"), "AE"),
+    ("974", re.compile(r"^(?:\+974|00974|974)?[0-9]{8}$"), "QA"),
+    ("973", re.compile(r"^(?:\+973|00973|973)?[0-9]{8}$"), "BH"),
+    ("968", re.compile(r"^(?:\+968|00968|968)?[0-9]{8}$"), "OM"),
+    ("965", re.compile(r"^(?:\+965|00965|965)?[0-9]{8}$"), "KW"),
+    ("964", re.compile(r"^(?:\+964|00964|964|0)?7[0-9]{9}$"), "IQ"),
+    ("961", re.compile(r"^(?:\+961|00961|961|0)?[0-9]{7,8}$"), "LB"),
+    ("218", re.compile(r"^(?:\+218|00218|218|0)?9[0-9]{8}$"), "LY"),
 ]
+
+PHONE_CC_TO_ISO = {cc: iso for cc, _, iso in COUNTRY_PHONE_PATTERNS}
 
 _STRIP_PREFIXES = [
     ("+966", 4), ("00966", 5), ("966", 3),
@@ -68,16 +70,16 @@ def normalize_ksa_phone(raw: str) -> tuple[str, str, str] | None:
     return e164, digits_no_plus, local
 
 
-def normalize_phone(raw: str) -> tuple[str, str, str] | None:
+def normalize_phone(raw: str) -> tuple[str, str, str, str] | None:
     """
     Validate and normalize a phone from any allowed Arab country.
 
-    Returns (e164, digits_no_plus, display) or None if invalid.
+    Returns (e164, digits_no_plus, display, iso_country_code) or None.
     Tries KSA first (most common), then other countries.
     """
     cleaned = re.sub(r"[\s\-\(\).]", "", raw)
 
-    for country_code, pattern, _label in COUNTRY_PHONE_PATTERNS:
+    for country_code, pattern, iso in COUNTRY_PHONE_PATTERNS:
         if not pattern.match(cleaned):
             continue
 
@@ -91,7 +93,7 @@ def normalize_phone(raw: str) -> tuple[str, str, str] | None:
         e164 = f"+{country_code}{local_digits}"
         digits_no_plus = f"{country_code}{local_digits}"
         display = f"0{local_digits}" if country_code == "966" else e164
-        return e164, digits_no_plus, display
+        return e164, digits_no_plus, display, iso
 
     return None
 
