@@ -55,10 +55,19 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
 
     # Country gate also enforced in the DB-fallback path
     if not is_test:
+        from app.services import sheets as sheets_svc
+        import asyncio as _asyncio
         allowed_countries = settings.get_allowed_countries()
         ip_iso = await geoip_svc.lookup_country(client_ip)
         phone_iso = phone_result[3] if phone_result else None
         if allowed_countries and ip_iso and ip_iso not in allowed_countries:
+            _asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                req=req,
+                client_ip=client_ip,
+                phone_e164=phone_result[0] if phone_result else req.customer.phone,
+                fraud_reason=f"country_not_allowed_geoip:{ip_iso}",
+                country_iso=ip_iso,
+            ))
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -67,6 +76,13 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 },
             )
         if ip_iso and phone_iso and ip_iso != phone_iso:
+            _asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                req=req,
+                client_ip=client_ip,
+                phone_e164=phone_result[0] if phone_result else req.customer.phone,
+                fraud_reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso}",
+                country_iso=ip_iso,
+            ))
             raise HTTPException(
                 status_code=403,
                 detail={

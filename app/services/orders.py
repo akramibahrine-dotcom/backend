@@ -194,15 +194,23 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
                 ip=client_ip,
                 ip_iso=ip_iso_fallback,
             )
+            reason = f"country_not_allowed_geoip:{ip_iso_fallback}"
             fraud_check_record = FraudCheck(
                 phone_e164_masked=mask_phone(phone_e164),
                 ip_address=client_ip,
                 decision="rejected",
-                reason=f"country_not_allowed_geoip:{ip_iso_fallback}",
+                reason=reason,
                 country_iso_code=ip_iso_fallback,
             )
             db.add(fraud_check_record)
             await db.commit()
+            asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                req=req,
+                client_ip=client_ip,
+                phone_e164=phone_e164,
+                fraud_reason=reason,
+                country_iso=ip_iso_fallback,
+            ))
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -218,15 +226,23 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
                 ip_iso=ip_iso_fallback,
                 ip=client_ip,
             )
+            reason = f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso_fallback}"
             fraud_check_record = FraudCheck(
                 phone_e164_masked=mask_phone(phone_e164),
                 ip_address=client_ip,
                 decision="rejected",
-                reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso_fallback}",
+                reason=reason,
                 country_iso_code=ip_iso_fallback,
             )
             db.add(fraud_check_record)
             await db.commit()
+            asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                req=req,
+                client_ip=client_ip,
+                phone_e164=phone_e164,
+                fraud_reason=reason,
+                country_iso=ip_iso_fallback,
+            ))
             raise HTTPException(
                 status_code=403,
                 detail={
@@ -257,6 +273,16 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         )
         db.add(fraud_check_record)
         await db.commit()
+        asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+            req=req,
+            client_ip=client_ip,
+            phone_e164=phone_e164,
+            fraud_reason=fraud_result.reason,
+            country_iso=fraud_result.country_iso_code or ip_iso_fallback,
+            is_vpn_proxy=_detect_vpn_proxy_label(fraud_result),
+            risk_score=fraud_result.risk_score,
+            ip_risk=fraud_result.ip_risk,
+        ))
         raise HTTPException(
             status_code=403,
             detail={
@@ -279,11 +305,12 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             ip_iso=effective_ip_iso,
             ip=client_ip,
         )
+        reason = f"phone_ip_country_mismatch:{phone_iso}_vs_{effective_ip_iso}"
         fraud_check_record = FraudCheck(
             phone_e164_masked=mask_phone(phone_e164),
             ip_address=client_ip,
             decision="rejected",
-            reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{effective_ip_iso}",
+            reason=reason,
             country_iso_code=effective_ip_iso,
             risk_score=fraud_result.risk_score,
             ip_risk=fraud_result.ip_risk,
@@ -291,6 +318,16 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         )
         db.add(fraud_check_record)
         await db.commit()
+        asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+            req=req,
+            client_ip=client_ip,
+            phone_e164=phone_e164,
+            fraud_reason=reason,
+            country_iso=effective_ip_iso,
+            is_vpn_proxy=_detect_vpn_proxy_label(fraud_result),
+            risk_score=fraud_result.risk_score,
+            ip_risk=fraud_result.ip_risk,
+        ))
         raise HTTPException(
             status_code=403,
             detail={
