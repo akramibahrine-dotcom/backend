@@ -19,6 +19,7 @@ from app.models.order import Order, OrderItem
 from app.schemas.fraud import FraudDecision
 from app.schemas.order import CreateOrderRequest, CreateOrderResponse, ValidateOrderRequest, ValidateOrderResponse
 from app.schemas.tracking import CAPIContent, CAPIOrderPayload
+from app.services import geoip as geoip_svc
 from app.services import maxmind as maxmind_svc
 from app.services import sheets as sheets_svc
 from app.services.products import (
@@ -181,7 +182,60 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             detail={"error": "total_mismatch", "message": "إجمالي الطلب غير صحيح."},
         )
 
-    # Fraud check
+    # Always-on country gate (works even if MaxMind is down/unconfigured).
+    # Skipped only for the whitelisted test phone.
+    allowed_countries = settings.get_allowed_countries()
+    ip_iso_fallback = None if is_test else await geoip_svc.lookup_country(client_ip)
+
+    if not is_test and allowed_countries:
+        if ip_iso_fallback and ip_iso_fallback not in allowed_countries:
+            logger.warning(
+                "country_not_allowed_geoip",
+                ip=client_ip,
+                ip_iso=ip_iso_fallback,
+            )
+            fraud_check_record = FraudCheck(
+                phone_e164_masked=mask_phone(phone_e164),
+                ip_address=client_ip,
+                decision="rejected",
+                reason=f"country_not_allowed_geoip:{ip_iso_fallback}",
+                country_iso_code=ip_iso_fallback,
+            )
+            db.add(fraud_check_record)
+            await db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "order_rejected",
+                    "message": "عذرًا، الطلبات غير متاحة في بلدك حاليًا. تواصلي معنا إذا كان هذا خطأ.",
+                },
+            )
+
+        if ip_iso_fallback and phone_iso and ip_iso_fallback != phone_iso:
+            logger.warning(
+                "phone_ip_country_mismatch_geoip",
+                phone_iso=phone_iso,
+                ip_iso=ip_iso_fallback,
+                ip=client_ip,
+            )
+            fraud_check_record = FraudCheck(
+                phone_e164_masked=mask_phone(phone_e164),
+                ip_address=client_ip,
+                decision="rejected",
+                reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso_fallback}",
+                country_iso_code=ip_iso_fallback,
+            )
+            db.add(fraud_check_record)
+            await db.commit()
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "order_rejected",
+                    "message": "رقم الجوال لا يتطابق مع بلد الاتصال. إذا كان هذا خطأ تواصلي معنا.",
+                },
+            )
+
+    # MaxMind layer: VPN / proxy / Tor / risk score (independent of basic country gate)
     fraud_result = await maxmind_svc.check_fraud(
         ip_address=client_ip,
         user_agent=user_agent,
@@ -196,7 +250,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             ip_address=client_ip,
             decision=fraud_result.decision,
             reason=fraud_result.reason,
-            country_iso_code=fraud_result.country_iso_code,
+            country_iso_code=fraud_result.country_iso_code or ip_iso_fallback,
             risk_score=fraud_result.risk_score,
             ip_risk=fraud_result.ip_risk,
             raw_response=fraud_result.raw_response,
@@ -211,25 +265,26 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             },
         )
 
-    # Phone country must match IP country (skip for whitelisted test phones)
+    # Re-check IP/phone match using whichever country signal we got (MaxMind preferred)
+    effective_ip_iso = fraud_result.country_iso_code or ip_iso_fallback
     if (
         not is_test
         and phone_iso
-        and fraud_result.country_iso_code
-        and fraud_result.country_iso_code != phone_iso
+        and effective_ip_iso
+        and effective_ip_iso != phone_iso
     ):
         logger.warning(
             "phone_ip_country_mismatch",
             phone_iso=phone_iso,
-            ip_iso=fraud_result.country_iso_code,
+            ip_iso=effective_ip_iso,
             ip=client_ip,
         )
         fraud_check_record = FraudCheck(
             phone_e164_masked=mask_phone(phone_e164),
             ip_address=client_ip,
             decision="rejected",
-            reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{fraud_result.country_iso_code}",
-            country_iso_code=fraud_result.country_iso_code,
+            reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{effective_ip_iso}",
+            country_iso_code=effective_ip_iso,
             risk_score=fraud_result.risk_score,
             ip_risk=fraud_result.ip_risk,
             raw_response=fraud_result.raw_response,

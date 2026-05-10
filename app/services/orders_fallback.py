@@ -17,6 +17,7 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.core.security import normalize_phone
 from app.schemas.order import CreateOrderRequest, CreateOrderResponse
+from app.services import geoip as geoip_svc
 from app.services.products import get_product, validate_bundle_price, validate_upsell
 
 logger = get_logger(__name__)
@@ -51,6 +52,28 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
             status_code=422,
             detail={"error": "invalid_phone", "message": "اكتبي رقم جوال صحيح لإكمال الطلب."},
         )
+
+    # Country gate also enforced in the DB-fallback path
+    if not is_test:
+        allowed_countries = settings.get_allowed_countries()
+        ip_iso = await geoip_svc.lookup_country(client_ip)
+        phone_iso = phone_result[3] if phone_result else None
+        if allowed_countries and ip_iso and ip_iso not in allowed_countries:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "order_rejected",
+                    "message": "عذرًا، الطلبات غير متاحة في بلدك حاليًا.",
+                },
+            )
+        if ip_iso and phone_iso and ip_iso != phone_iso:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "order_rejected",
+                    "message": "رقم الجوال لا يتطابق مع بلد الاتصال.",
+                },
+            )
 
     # Basic price validation
     welcome_codes = {c.strip() for c in settings.welcome_promo_codes.split(",") if c.strip()}
