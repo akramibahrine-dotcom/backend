@@ -18,6 +18,7 @@ def build_order_payload(
     country_iso: str | None,
     risk_score: float | None,
     ip_risk: float | None,
+    is_vpn_proxy: str = "",
 ) -> dict:
     items_summary = "; ".join(
         f"{item.quantity}x {item.product_name_ar}" for item in items
@@ -53,6 +54,7 @@ def build_order_payload(
         "landing_page_url": order.landing_page_url or "",
         "page_url": order.page_url or "",
         "purchase_event_id": order.purchase_event_id or "",
+        "vpn_proxy": is_vpn_proxy,
         "notes": "",
     }
 
@@ -65,6 +67,7 @@ async def send_to_sheets(
     country_iso: str | None,
     risk_score: float | None,
     ip_risk: float | None,
+    is_vpn_proxy: str = "",
 ) -> dict:
     """
     Forward order to Google Sheets webhook.
@@ -86,6 +89,7 @@ async def send_to_sheets(
             country_iso=country_iso,
             risk_score=risk_score,
             ip_risk=ip_risk,
+            is_vpn_proxy=is_vpn_proxy,
         ),
     }
 

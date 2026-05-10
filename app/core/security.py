@@ -8,6 +8,30 @@ KSA_MOBILE_PATTERN = re.compile(
     r"^(?:\+966|00966|966|0)?5[0-9]{8}$"
 )
 
+COUNTRY_PHONE_PATTERNS: list[tuple[str, re.Pattern, str]] = [
+    ("966", re.compile(r"^(?:\+966|00966|966|0)?5[0-9]{8}$"), "KSA"),
+    ("971", re.compile(r"^(?:\+971|00971|971|0)?5[0-9]{8}$"), "UAE"),
+    ("974", re.compile(r"^(?:\+974|00974|974)?[0-9]{8}$"), "QAT"),
+    ("973", re.compile(r"^(?:\+973|00973|973)?[0-9]{8}$"), "BHR"),
+    ("968", re.compile(r"^(?:\+968|00968|968)?[0-9]{8}$"), "OMN"),
+    ("965", re.compile(r"^(?:\+965|00965|965)?[0-9]{8}$"), "KWT"),
+    ("964", re.compile(r"^(?:\+964|00964|964|0)?7[0-9]{9}$"), "IRQ"),
+    ("961", re.compile(r"^(?:\+961|00961|961|0)?[0-9]{7,8}$"), "LBN"),
+    ("218", re.compile(r"^(?:\+218|00218|218|0)?9[0-9]{8}$"), "LBY"),
+]
+
+_STRIP_PREFIXES = [
+    ("+966", 4), ("00966", 5), ("966", 3),
+    ("+971", 4), ("00971", 5), ("971", 3),
+    ("+974", 4), ("00974", 5), ("974", 3),
+    ("+973", 4), ("00973", 5), ("973", 3),
+    ("+968", 4), ("00968", 5), ("968", 3),
+    ("+965", 4), ("00965", 5), ("965", 3),
+    ("+964", 4), ("00964", 5), ("964", 3),
+    ("+961", 4), ("00961", 5), ("961", 3),
+    ("+218", 4), ("00218", 5), ("218", 3),
+]
+
 
 def normalize_ksa_phone(raw: str) -> tuple[str, str, str] | None:
     """
@@ -42,6 +66,34 @@ def normalize_ksa_phone(raw: str) -> tuple[str, str, str] | None:
     local = f"0{local_digits}"
 
     return e164, digits_no_plus, local
+
+
+def normalize_phone(raw: str) -> tuple[str, str, str] | None:
+    """
+    Validate and normalize a phone from any allowed Arab country.
+
+    Returns (e164, digits_no_plus, display) or None if invalid.
+    Tries KSA first (most common), then other countries.
+    """
+    cleaned = re.sub(r"[\s\-\(\).]", "", raw)
+
+    for country_code, pattern, _label in COUNTRY_PHONE_PATTERNS:
+        if not pattern.match(cleaned):
+            continue
+
+        for prefix, length in _STRIP_PREFIXES:
+            if cleaned.startswith(prefix) and prefix.lstrip("+0").startswith(country_code):
+                local_digits = cleaned[length:]
+                break
+        else:
+            local_digits = cleaned.lstrip("0")
+
+        e164 = f"+{country_code}{local_digits}"
+        digits_no_plus = f"{country_code}{local_digits}"
+        display = f"0{local_digits}" if country_code == "966" else e164
+        return e164, digits_no_plus, display
+
+    return None
 
 
 def hash_sha256(value: str) -> str:

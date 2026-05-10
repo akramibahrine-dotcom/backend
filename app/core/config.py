@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     run_migrations_on_start: bool = True
 
     # Phone / Testing
-    test_phone_whitelist: str = "055000000"
+    test_phone_whitelist: str = "0501234987"
     trust_proxy_headers: bool = True
 
     # MaxMind
@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     maxmind_minfraud_endpoint: str = "https://minfraud.maxmind.com/minfraud/v2.0/insights"
     maxmind_max_risk_score: float = 25.0
     maxmind_max_ip_risk: float = 10.0
-    maxmind_block_non_ksa: bool = True
+    maxmind_allowed_countries: str = "SA,QA,BH,OM,LY,IQ,AE,LB,KW"
     maxmind_block_anonymous_ip: bool = True
     fraud_provider_failure_mode: Literal["reject", "allow"] = "reject"
 
@@ -92,6 +92,9 @@ class Settings(BaseSettings):
     @property
     def maxmind_configured(self) -> bool:
         return bool(self.maxmind_account_id and self.maxmind_license_key)
+
+    def get_allowed_countries(self) -> set[str]:
+        return {c.strip().upper() for c in self.maxmind_allowed_countries.split(",") if c.strip()}
 
 
 @lru_cache

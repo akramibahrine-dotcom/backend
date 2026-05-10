@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.logging import get_logger, mask_phone
-from app.core.security import normalize_ksa_phone
+from app.core.security import normalize_ksa_phone, normalize_phone
 from app.models.event import TrackingEvent, WebhookDelivery
 from app.models.fraud import FraudCheck
 from app.models.order import Order, OrderItem
@@ -61,11 +61,11 @@ async def generate_public_order_number(db: AsyncSession) -> str:
 
 
 def _validate_phone(raw_phone: str, test_whitelist: str) -> tuple[str, str, str] | None:
-    """Returns (e164, digits_no_plus, local) or None."""
+    """Returns (e164, digits_no_plus, display) or None."""
     cleaned = re.sub(r"[\s\-\(\).]", "", raw_phone)
     if cleaned == test_whitelist:
         return cleaned, cleaned, cleaned
-    return normalize_ksa_phone(cleaned)
+    return normalize_phone(cleaned)
 
 
 async def validate_order(req: ValidateOrderRequest, request: Request) -> ValidateOrderResponse:
@@ -74,7 +74,7 @@ async def validate_order(req: ValidateOrderRequest, request: Request) -> Validat
     if not phone_result:
         return ValidateOrderResponse(
             valid=False,
-            error="اكتبي رقم جوال سعودي صحيح مثل 05XXXXXXXX",
+            error="اكتبي رقم جوال صحيح",
             error_code="invalid_phone",
         )
     e164, _, local = phone_result
@@ -93,11 +93,14 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             status_code=422,
             detail={
                 "error": "invalid_phone",
-                "message": "اكتبي رقم جوال سعودي صحيح لإكمال الطلب.",
+                "message": "اكتبي رقم جوال صحيح لإكمال الطلب.",
             },
         )
     phone_e164, phone_digits, phone_local = phone_result
-    is_test = phone_e164 == settings.test_phone_whitelist or phone_e164 == phone_digits == settings.test_phone_whitelist
+    wl_raw = settings.test_phone_whitelist.strip()
+    wl_digits = wl_raw.lstrip("+").lstrip("0")
+    phone_tail = phone_e164.lstrip("+").lstrip("0")
+    is_test = phone_tail.endswith(wl_digits) or wl_digits.endswith(phone_tail)
 
     # Idempotency check
     if req.idempotency_key:
@@ -182,7 +185,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
     fraud_result = await maxmind_svc.check_fraud(
         ip_address=client_ip,
         user_agent=user_agent,
-        phone_e164=phone_e164 if not is_test else settings.test_phone_whitelist,
+        phone_e164=phone_e164,
         order_id=f"pre-{req.idempotency_key or 'none'}",
         amount_sar=float(expected_total),
     )
@@ -204,7 +207,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             status_code=403,
             detail={
                 "error": "order_rejected",
-                "message": "عذرًا، الطلبات متاحة حاليًا داخل السعودية فقط. إذا كنت داخل السعودية وتعتقدين أن هذا خطأ، تواصلي معنا.",
+                "message": "عذرًا، لا يمكن إتمام الطلب. إذا كنتِ تعتقدين أن هذا خطأ، تواصلي معنا.",
             },
         )
 
@@ -321,6 +324,24 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
     )
 
 
+def _detect_vpn_proxy_label(fraud: FraudDecision) -> str:
+    """Build a human-readable label for VPN/proxy detection flags."""
+    flags: list[str] = []
+    if fraud.is_anonymous_vpn:
+        flags.append("VPN")
+    if fraud.is_anonymous_proxy:
+        flags.append("Proxy")
+    if fraud.is_public_proxy:
+        flags.append("Public Proxy")
+    if fraud.is_residential_proxy:
+        flags.append("Residential Proxy")
+    if fraud.is_hosting_provider:
+        flags.append("Hosting/Datacenter")
+    if fraud.is_tor_exit_node:
+        flags.append("Tor")
+    return ", ".join(flags) if flags else ""
+
+
 async def _fire_post_order_tasks(
     order: Order,
     order_items: list[OrderItem],
@@ -368,6 +389,7 @@ async def _fire_post_order_tasks(
             country_iso=fraud_result.country_iso_code,
             risk_score=fraud_result.risk_score,
             ip_risk=fraud_result.ip_risk,
+            is_vpn_proxy=_detect_vpn_proxy_label(fraud_result),
         )
         wd = WebhookDelivery(
             order_id=order.id,

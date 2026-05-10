@@ -15,7 +15,7 @@ from fastapi import HTTPException, Request
 
 from app.core.config import get_settings
 from app.core.logging import get_logger
-from app.core.security import normalize_ksa_phone
+from app.core.security import normalize_phone
 from app.schemas.order import CreateOrderRequest, CreateOrderResponse
 from app.services.products import get_product, validate_bundle_price, validate_upsell
 
@@ -40,12 +40,16 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
 
     # Basic phone validation
     cleaned = req.customer.phone.replace(" ", "").replace("-", "")
-    phone_result = normalize_ksa_phone(cleaned)
-    is_test = cleaned == settings.test_phone_whitelist
+    wl_digits = settings.test_phone_whitelist.strip().lstrip("+").lstrip("0")
+    cleaned_digits = cleaned.lstrip("+").lstrip("0")
+    is_test = cleaned == settings.test_phone_whitelist.strip() or (
+        cleaned_digits.endswith(wl_digits) or wl_digits.endswith(cleaned_digits)
+    )
+    phone_result = normalize_phone(cleaned)
     if not phone_result and not is_test:
         raise HTTPException(
             status_code=422,
-            detail={"error": "invalid_phone", "message": "اكتبي رقم جوال سعودي صحيح لإكمال الطلب."},
+            detail={"error": "invalid_phone", "message": "اكتبي رقم جوال صحيح لإكمال الطلب."},
         )
 
     # Basic price validation
@@ -126,6 +130,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "landing_page_url": tracking.landing_page_url if tracking else "",
                 "page_url": tracking.page_url if tracking else "",
                 "purchase_event_id": tracking.purchase_event_id if tracking else "",
+                "vpn_proxy": "",
                 "notes": f"FALLBACK ORDER - DB unavailable. IP: {client_ip}",
             },
         }

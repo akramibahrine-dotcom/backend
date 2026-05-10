@@ -29,7 +29,10 @@ async def check_fraud(
     """
     settings = get_settings()
 
-    if phone_e164 == settings.test_phone_whitelist or phone_e164.lstrip("+") == settings.test_phone_whitelist:
+    wl_raw = settings.test_phone_whitelist.strip()
+    wl_digits = wl_raw.lstrip("+").lstrip("0")
+    phone_digits = phone_e164.lstrip("+").lstrip("0")
+    if phone_digits.endswith(wl_digits) or wl_digits.endswith(phone_digits):
         logger.info("fraud_check_whitelist", phone=mask_phone(phone_e164))
         return FraudDecision(
             allowed=True,
@@ -129,14 +132,21 @@ def _evaluate_result(data: dict, settings) -> FraudDecision:
     ip_risk = ip_data.get("risk")
     country_iso = country.get("iso_code")
 
-    if settings.maxmind_block_non_ksa and country_iso != "SA":
+    allowed_countries = settings.get_allowed_countries()
+    if allowed_countries and country_iso not in allowed_countries:
         return FraudDecision(
             allowed=False,
             decision="rejected",
-            reason="non_ksa_ip",
+            reason="country_not_allowed",
             country_iso_code=country_iso,
             risk_score=risk_score,
             ip_risk=ip_risk,
+            is_anonymous_proxy=traits.get("is_anonymous_proxy"),
+            is_anonymous_vpn=traits.get("is_anonymous_vpn"),
+            is_hosting_provider=traits.get("is_hosting_provider"),
+            is_public_proxy=traits.get("is_public_proxy"),
+            is_residential_proxy=traits.get("is_residential_proxy"),
+            is_tor_exit_node=traits.get("is_tor_exit_node"),
             raw_response=data,
         )
 
@@ -206,5 +216,11 @@ def _evaluate_result(data: dict, settings) -> FraudDecision:
         country_iso_code=country_iso,
         risk_score=risk_score,
         ip_risk=ip_risk,
+        is_anonymous_proxy=traits.get("is_anonymous_proxy"),
+        is_anonymous_vpn=traits.get("is_anonymous_vpn"),
+        is_hosting_provider=traits.get("is_hosting_provider"),
+        is_public_proxy=traits.get("is_public_proxy"),
+        is_residential_proxy=traits.get("is_residential_proxy"),
+        is_tor_exit_node=traits.get("is_tor_exit_node"),
         raw_response=data,
     )
