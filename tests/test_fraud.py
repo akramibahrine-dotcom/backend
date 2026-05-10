@@ -1,17 +1,16 @@
 """Tests for MaxMind fraud decision logic."""
 from __future__ import annotations
 
-import pytest
-
 from app.services.maxmind import _evaluate_result
-from app.core.config import get_settings
-
 
 class MockSettings:
-    maxmind_block_non_ksa = True
+    maxmind_allowed_countries = "SA"
     maxmind_block_anonymous_ip = True
     maxmind_max_risk_score = 25.0
     maxmind_max_ip_risk = 10.0
+
+    def get_allowed_countries(self) -> set[str]:
+        return {"SA"}
 
 
 SETTINGS = MockSettings()
@@ -57,7 +56,7 @@ class TestFraudDecisionLogic:
     def test_non_ksa_rejected(self):
         result = _evaluate_result(make_response(country_iso="US"), SETTINGS)
         assert result.allowed is False
-        assert result.reason == "non_ksa_ip"
+        assert result.reason == "country_not_allowed"
 
     def test_high_risk_score_rejected(self):
         result = _evaluate_result(make_response(risk_score=30), SETTINGS)
@@ -123,5 +122,5 @@ class TestFraudDecisionLogic:
     def test_missing_ip_address_handled(self):
         data = {"risk_score": 5}
         result = _evaluate_result(data, SETTINGS)
-        if SETTINGS.maxmind_block_non_ksa:
-            assert result.allowed is False
+        assert result.allowed is False
+        assert result.reason == "country_not_allowed"

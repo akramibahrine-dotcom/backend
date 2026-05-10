@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 from datetime import datetime, timezone
 
 import httpx
@@ -64,6 +63,24 @@ async def check_fraud(
             amount_sar=amount_sar,
         )
         return _evaluate_result(result, settings)
+    except httpx.HTTPStatusError as exc:
+        status = exc.response.status_code if exc.response is not None else None
+        logger.error(
+            "fraud_check_http_error",
+            status_code=status,
+            error=str(exc),
+        )
+        if settings.fraud_provider_failure_mode == "allow":
+            return FraudDecision(
+                allowed=True,
+                decision="error_allow",
+                reason="provider_error_allow_mode",
+            )
+        return FraudDecision(
+            allowed=False,
+            decision="error_reject",
+            reason="provider_error_reject_mode",
+        )
     except Exception as exc:
         logger.error("fraud_check_error", error=str(exc))
         if settings.fraud_provider_failure_mode == "allow":
@@ -119,6 +136,13 @@ async def _call_maxmind(
             auth=(settings.maxmind_account_id, settings.maxmind_license_key),
             headers={"Accept": "application/json"},
         )
+        if response.status_code >= 400:
+            preview = ((response.text or "").strip().replace("\n", " "))[:800]
+            logger.error(
+                "maxmind_api_http_error",
+                status_code=response.status_code,
+                response_preview=preview,
+            )
         response.raise_for_status()
         return response.json()
 
