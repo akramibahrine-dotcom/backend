@@ -7,9 +7,8 @@ Create Date: 2026-05-11
 """
 from __future__ import annotations
 
-import sqlalchemy as sa
-
 from alembic import op
+import sqlalchemy as sa
 
 revision = "002"
 down_revision = "001"
@@ -18,87 +17,93 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "site_clicks",
-        sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("session_id", sa.String(100), nullable=True),
-        sa.Column("event_name", sa.String(80), nullable=False),
-        sa.Column("page_url", sa.Text, nullable=True),
-        sa.Column("referrer", sa.Text, nullable=True),
-        sa.Column("product_id", sa.String(100), nullable=True),
-        sa.Column("source", sa.String(100), nullable=True),
-        sa.Column("device_type", sa.String(50), nullable=True),
-        sa.Column("browser", sa.String(100), nullable=True),
-        sa.Column("os", sa.String(100), nullable=True),
-        sa.Column("utm_source", sa.String(200), nullable=True),
-        sa.Column("utm_medium", sa.String(200), nullable=True),
-        sa.Column("utm_campaign", sa.String(200), nullable=True),
-        sa.Column("utm_content", sa.String(200), nullable=True),
-        sa.Column("utm_term", sa.String(200), nullable=True),
-        sa.Column("ip_address", sa.String(50), nullable=True),
-        sa.Column("user_agent", sa.Text, nullable=True),
-        sa.Column("country_iso_code", sa.String(10), nullable=True),
-        sa.Column("risk_score", sa.Numeric(6, 2), nullable=True),
-        sa.Column("ip_risk", sa.Numeric(6, 2), nullable=True),
-        sa.Column("is_valid_ksa", sa.Boolean, nullable=False, server_default="false"),
-        sa.Column("invalid_reason", sa.String(200), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_site_clicks_session_id", "site_clicks", ["session_id"])
-    op.create_index("ix_site_clicks_event_name", "site_clicks", ["event_name"])
-    op.create_index("ix_site_clicks_product_id", "site_clicks", ["product_id"])
-    op.create_index("ix_site_clicks_device_type", "site_clicks", ["device_type"])
-    op.create_index("ix_site_clicks_country_iso_code", "site_clicks", ["country_iso_code"])
-    op.create_index("ix_site_clicks_is_valid_ksa", "site_clicks", ["is_valid_ksa"])
-    op.create_index("ix_site_clicks_created_at", "site_clicks", ["created_at"])
+    conn = op.get_bind()
 
-    op.create_table(
-        "admin_login_events",
-        sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("username", sa.String(100), nullable=False),
-        sa.Column("ip_address", sa.String(50), nullable=True),
-        sa.Column("user_agent", sa.Text, nullable=True),
-        sa.Column("device_type", sa.String(50), nullable=True),
-        sa.Column("browser", sa.String(100), nullable=True),
-        sa.Column("os", sa.String(100), nullable=True),
-        sa.Column("country_iso_code", sa.String(10), nullable=True),
-        sa.Column("status", sa.String(50), nullable=False, server_default="success"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_admin_login_events_username", "admin_login_events", ["username"])
-    op.create_index("ix_admin_login_events_ip_address", "admin_login_events", ["ip_address"])
-    op.create_index("ix_admin_login_events_status", "admin_login_events", ["status"])
-    op.create_index("ix_admin_login_events_created_at", "admin_login_events", ["created_at"])
-    op.create_index("ix_admin_login_events_last_seen_at", "admin_login_events", ["last_seen_at"])
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS site_clicks (
+            id VARCHAR(36) PRIMARY KEY,
+            session_id VARCHAR(100),
+            event_name VARCHAR(80) NOT NULL,
+            page_url TEXT,
+            referrer TEXT,
+            product_id VARCHAR(100),
+            source VARCHAR(100),
+            device_type VARCHAR(50),
+            browser VARCHAR(100),
+            os VARCHAR(100),
+            utm_source VARCHAR(200),
+            utm_medium VARCHAR(200),
+            utm_campaign VARCHAR(200),
+            utm_content VARCHAR(200),
+            utm_term VARCHAR(200),
+            ip_address VARCHAR(50),
+            user_agent TEXT,
+            country_iso_code VARCHAR(10),
+            risk_score NUMERIC(6, 2),
+            ip_risk NUMERIC(6, 2),
+            is_valid_ksa BOOLEAN NOT NULL DEFAULT FALSE,
+            invalid_reason VARCHAR(200),
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_session_id ON site_clicks (session_id)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_event_name ON site_clicks (event_name)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_product_id ON site_clicks (product_id)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_device_type ON site_clicks (device_type)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_country_iso_code ON site_clicks (country_iso_code)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_is_valid_ksa ON site_clicks (is_valid_ksa)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_site_clicks_created_at ON site_clicks (created_at)"))
 
-    op.create_table(
-        "admin_access_rules",
-        sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("name", sa.String(200), nullable=False),
-        sa.Column("rule_type", sa.String(50), nullable=False),
-        sa.Column("value", sa.String(200), nullable=False),
-        sa.Column("action", sa.String(50), nullable=False, server_default="allow"),
-        sa.Column("enabled", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column("notes", sa.Text, nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_admin_access_rules_rule_type", "admin_access_rules", ["rule_type"])
-    op.create_index("ix_admin_access_rules_enabled", "admin_access_rules", ["enabled"])
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS admin_login_events (
+            id VARCHAR(36) PRIMARY KEY,
+            username VARCHAR(100) NOT NULL,
+            ip_address VARCHAR(50),
+            user_agent TEXT,
+            device_type VARCHAR(50),
+            browser VARCHAR(100),
+            os VARCHAR(100),
+            country_iso_code VARCHAR(10),
+            status VARCHAR(50) NOT NULL DEFAULT 'success',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_login_events_username ON admin_login_events (username)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_login_events_ip_address ON admin_login_events (ip_address)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_login_events_status ON admin_login_events (status)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_login_events_created_at ON admin_login_events (created_at)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_login_events_last_seen_at ON admin_login_events (last_seen_at)"))
 
-    op.create_table(
-        "store_translation_overrides",
-        sa.Column("id", sa.String(36), primary_key=True),
-        sa.Column("locale", sa.String(20), nullable=False, server_default="ar"),
-        sa.Column("translation_key", sa.String(300), nullable=False),
-        sa.Column("value", sa.Text, nullable=False),
-        sa.Column("enabled", sa.Boolean, nullable=False, server_default="true"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_store_translation_overrides_translation_key", "store_translation_overrides", ["translation_key"])
-    op.create_index("ix_store_translation_overrides_enabled", "store_translation_overrides", ["enabled"])
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS admin_access_rules (
+            id VARCHAR(36) PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            rule_type VARCHAR(50) NOT NULL,
+            value VARCHAR(200) NOT NULL,
+            action VARCHAR(50) NOT NULL DEFAULT 'allow',
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            notes TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_access_rules_rule_type ON admin_access_rules (rule_type)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_admin_access_rules_enabled ON admin_access_rules (enabled)"))
+
+    conn.execute(sa.text("""
+        CREATE TABLE IF NOT EXISTS store_translation_overrides (
+            id VARCHAR(36) PRIMARY KEY,
+            locale VARCHAR(20) NOT NULL DEFAULT 'ar',
+            translation_key VARCHAR(300) NOT NULL,
+            value TEXT NOT NULL,
+            enabled BOOLEAN NOT NULL DEFAULT TRUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+    """))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_store_translation_overrides_translation_key ON store_translation_overrides (translation_key)"))
+    conn.execute(sa.text("CREATE INDEX IF NOT EXISTS ix_store_translation_overrides_enabled ON store_translation_overrides (enabled)"))
 
 
 def downgrade() -> None:
