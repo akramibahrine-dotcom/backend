@@ -54,7 +54,7 @@ def _country_from_phone(phone_e164: str) -> str:
 def _format_date(dt: datetime | None) -> str:
     if not dt:
         dt = datetime.now(timezone.utc)
-    return dt.strftime("%d/%m/%Y")
+    return dt.strftime("%d/%m/%Y %H:%M")
 
 
 def build_sheets_row(
@@ -223,7 +223,7 @@ async def send_rejected_attempt_to_sheets(
     payload = {
         "order": {
             "order_id":        public_number,
-            "date":            datetime.now(timezone.utc).strftime("%d/%m/%Y"),
+            "date":            datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M"),
             "country":         country_name,
             "name":            req.customer.name,
             "phone":           phone_e164 or req.customer.phone,
