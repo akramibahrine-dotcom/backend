@@ -352,7 +352,6 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         customer_name=req.customer.name,
         customer_phone_e164=phone_e164,
         customer_phone_local=phone_local,
-        customer_address=req.customer.address or None,
         is_test_order=is_test or fraud_result.is_test,
         subtotal_sar=expected_total - shipping,
         shipping_sar=shipping,
@@ -437,6 +436,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             capi_payload=capi_payload,
             fraud_result=fraud_result,
             db_factory=db.get_bind(),
+            customer_address=req.customer.address or "",
         )
     )
 
@@ -474,6 +474,7 @@ async def _fire_post_order_tasks(
     capi_payload: CAPIOrderPayload,
     fraud_result: FraudDecision,
     db_factory,
+    customer_address: str = "",
 ) -> None:
     """Run CAPI + Sheets tasks after order creation without blocking the response."""
     from app.db.session import get_session_factory
@@ -516,6 +517,7 @@ async def _fire_post_order_tasks(
             risk_score=fraud_result.risk_score,
             ip_risk=fraud_result.ip_risk,
             is_vpn_proxy=_detect_vpn_proxy_label(fraud_result),
+            customer_address=customer_address,
         )
         wd = WebhookDelivery(
             order_id=order.id,

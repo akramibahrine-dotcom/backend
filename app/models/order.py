@@ -24,7 +24,6 @@ class Order(Base):
     customer_name: Mapped[str] = mapped_column(String(200), nullable=False)
     customer_phone_e164: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     customer_phone_local: Mapped[str] = mapped_column(String(20), nullable=False)
-    customer_address: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_test_order: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     subtotal_sar: Mapped[int] = mapped_column(Integer, nullable=False)

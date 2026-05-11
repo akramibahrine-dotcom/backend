@@ -61,6 +61,7 @@ def build_sheets_row(
     order: Order,
     items: list[OrderItem],
     country_iso: str | None,
+    customer_address: str = "",
 ) -> dict:
     """Build the flat dict that maps 1-to-1 to the Google Sheet columns."""
     # Derive country from phone first, fall back to IP-based ISO
@@ -104,7 +105,7 @@ def build_sheets_row(
         "country":         country_name,
         "name":            order.customer_name,
         "phone":           order.customer_phone_e164,
-        "address":         order.customer_address or "",
+        "address":         customer_address,
         "url":             url,
         "sku":             "/".join(skus),
         "product":         "/".join(product_names),
@@ -117,7 +118,7 @@ def build_sheets_row(
         "utm_campaign":    order.utm_campaign or "",
         "utm_term":        order.utm_term or "",
         "utm_content":     order.utm_content or "",
-        "national_address": order.customer_address or "",
+        "national_address": customer_address,
         "spend":           "",
         "orders":          "",
         "cpl":             "",
@@ -134,6 +135,7 @@ async def send_to_sheets(
     risk_score: float | None,
     ip_risk: float | None,
     is_vpn_proxy: str = "",
+    customer_address: str = "",
 ) -> dict:
     """
     Forward order to Google Sheets webhook.
@@ -150,6 +152,7 @@ async def send_to_sheets(
             order=order,
             items=items,
             country_iso=country_iso,
+            customer_address=customer_address,
         ),
     }
 
