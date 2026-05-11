@@ -41,7 +41,6 @@ class Settings(BaseSettings):
 
     # Google Sheets
     google_sheets_webhook_url: str = ""
-    google_sheets_webhook_secret: str = ""
 
     # Meta CAPI
     meta_pixel_id: str = ""

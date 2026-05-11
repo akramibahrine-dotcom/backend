@@ -11,6 +11,14 @@ BUNDLE_PRICES: dict[int, int] = {
 
 UPSELL_PRICE_SAR = 99
 
+WELCOME_DISCOUNT_PERCENT = 10
+
+
+def discounted_amount(amount: int) -> int:
+    """Integer SAR after welcome discount (floor)."""
+    return max(1, amount * (100 - WELCOME_DISCOUNT_PERCENT) // 100)
+
+
 UPSELL_MAP: dict[str, str] = {
     "weight-support-tea": "colon-comfort-tea",
     "colon-comfort-tea": "liver-wellness-tea",
@@ -25,32 +33,39 @@ UPSELL_MAP: dict[str, str] = {
 class ProductInfo:
     product_id: str
     name_ar: str
+    sku: str
 
 
 PRODUCTS: dict[str, ProductInfo] = {
     "weight-support-tea": ProductInfo(
         product_id="weight-support-tea",
         name_ar="شاي عشبي لدعم إدارة الوزن",
+        sku="BAYT-WST-001",
     ),
     "colon-comfort-tea": ProductInfo(
         product_id="colon-comfort-tea",
         name_ar="شاي عشبي لراحة القولون والغازات",
+        sku="BAYT-CCT-002",
     ),
     "hemorrhoid-comfort-tea": ProductInfo(
         product_id="hemorrhoid-comfort-tea",
         name_ar="شاي عشبي لدعم الراحة مع البواسير",
+        sku="BAYT-HCT-003",
     ),
     "liver-wellness-tea": ProductInfo(
         product_id="liver-wellness-tea",
         name_ar="شاي عشبي لدعم صحة الكبد",
+        sku="BAYT-LWT-004",
     ),
     "lung-smoking-support-tea": ProductInfo(
         product_id="lung-smoking-support-tea",
         name_ar="شاي عشبي لدعم الرئة وتقليل آثار التدخين",
+        sku="BAYT-LST-005",
     ),
     "prostate-wellness-tea": ProductInfo(
         product_id="prostate-wellness-tea",
         name_ar="شاي عشبي لدعم صحة البروستات",
+        sku="BAYT-PWT-006",
     ),
 }
 
@@ -66,12 +81,15 @@ def validate_bundle_price(
     *,
     welcome_discount: bool = False,
 ) -> bool:
-    """Validates catalog bundle SAR. welcome_discount is unused (API compat)."""
-    _ = product_id
-    _ = welcome_discount
+    """Catalog bundle price, or discounted price when welcome promo is active."""
     if quantity not in BUNDLE_PRICES:
         return False
-    return price_sar == BUNDLE_PRICES[quantity]
+    expected = BUNDLE_PRICES[quantity]
+    if price_sar == expected:
+        return True
+    if welcome_discount and price_sar == discounted_amount(expected):
+        return True
+    return False
 
 
 def validate_upsell(
@@ -81,15 +99,17 @@ def validate_upsell(
     *,
     welcome_discount: bool = False,
 ) -> bool:
-    _ = welcome_discount
-    if price_sar != UPSELL_PRICE_SAR:
+    allowed = {UPSELL_PRICE_SAR}
+    if welcome_discount:
+        allowed.add(discounted_amount(UPSELL_PRICE_SAR))
+    if price_sar not in allowed:
         return False
     if get_product(product_id) is None:
         return False
     for main_id in main_product_ids:
         if UPSELL_MAP.get(main_id) == product_id:
             return True
-    return False
+    return get_product(product_id) is not None
 
 
 def calculate_expected_total(items_total: int, upsell_total: int, shipping: int) -> int:

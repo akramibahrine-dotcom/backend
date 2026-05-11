@@ -11,56 +11,117 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.order import Order, OrderItem
 from app.schemas.order import CreateOrderRequest
+from app.services.products import get_product
 
 logger = get_logger(__name__)
 
+# ISO country code → Arabic country name
+COUNTRY_NAMES: dict[str, str] = {
+    "SA": "المملكة العربية السعودية",
+    "AE": "الإمارات العربية المتحدة",
+    "QA": "قطر",
+    "BH": "البحرين",
+    "OM": "عُمان",
+    "KW": "الكويت",
+    "IQ": "العراق",
+    "LB": "لبنان",
+    "LY": "ليبيا",
+}
 
-def build_order_payload(
+# ISO country code → default currency
+COUNTRY_CURRENCY: dict[str, str] = {
+    "SA": "SAR",
+    "AE": "AED",
+    "QA": "QAR",
+    "BH": "BHD",
+    "OM": "OMR",
+    "KW": "KWD",
+    "IQ": "IQD",
+    "LB": "LBP",
+    "LY": "LYD",
+}
+
+
+def _country_from_phone(phone_e164: str) -> str:
+    """Derive ISO country code from E.164 phone number."""
+    from app.core.security import COUNTRY_PHONE_PATTERNS
+    for _cc, pattern, iso in COUNTRY_PHONE_PATTERNS:
+        if pattern.match(phone_e164):
+            return iso
+    return ""
+
+
+def _format_date(dt: datetime | None) -> str:
+    if not dt:
+        dt = datetime.now(timezone.utc)
+    return dt.strftime("%d/%m/%Y")
+
+
+def build_sheets_row(
     order: Order,
     items: list[OrderItem],
-    fraud_decision: str,
-    fraud_reason: str,
     country_iso: str | None,
-    risk_score: float | None,
-    ip_risk: float | None,
-    is_vpn_proxy: str = "",
 ) -> dict:
-    items_summary = "; ".join(
-        f"{item.quantity}x {item.product_name_ar}" for item in items
+    """Build the flat dict that maps 1-to-1 to the Google Sheet columns."""
+    # Derive country from phone first, fall back to IP-based ISO
+    phone_iso = _country_from_phone(order.customer_phone_e164)
+    effective_iso = phone_iso or country_iso or ""
+
+    country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
+
+    # Currency: use display_currency if set, else derive from country, else SAR
+    currency = (
+        order.display_currency
+        or COUNTRY_CURRENCY.get(effective_iso, "SAR")
     )
-    item_count = sum(item.quantity for item in items)
+
+    # Total price in display currency
+    price = (
+        float(order.display_total)
+        if order.display_total
+        else float(order.total_sar)
+    )
+
+    # Products / SKUs / quantities as slash-joined strings
+    skus: list[str] = []
+    product_names: list[str] = []
+    quantities: list[str] = []
+
+    for item in items:
+        product_info = get_product(item.product_id)
+        skus.append(product_info.sku if product_info else item.product_id)
+        product_names.append(
+            product_info.name_ar if product_info else item.product_id
+        )
+        quantities.append(str(item.quantity))
+
+    # URL: prefer landing page, fall back to page_url
+    url = order.landing_page_url or order.page_url or ""
 
     return {
-        "public_order_number": order.public_order_number,
-        "created_at": order.created_at.isoformat() if order.created_at else "",
-        "customer_name": order.customer_name,
-        "customer_phone": order.customer_phone_e164,
-        "items_summary": items_summary,
-        "item_count": item_count,
-        "subtotal_sar": order.subtotal_sar,
-        "shipping_sar": order.shipping_sar,
-        "total_sar": order.total_sar,
-        "display_currency": order.display_currency or "SAR",
-        "display_total": float(order.display_total) if order.display_total else order.total_sar,
-        "payment_method": "COD",
-        "status": order.status,
-        "confirmation_status": "pending",
-        "is_test_order": order.is_test_order,
-        "fraud_decision": fraud_decision,
-        "fraud_reason": fraud_reason,
-        "ip_country": country_iso or "",
-        "risk_score": risk_score or "",
-        "ip_risk": ip_risk or "",
-        "utm_source": order.utm_source or "",
-        "utm_medium": order.utm_medium or "",
-        "utm_campaign": order.utm_campaign or "",
-        "utm_content": order.utm_content or "",
-        "utm_term": order.utm_term or "",
-        "landing_page_url": order.landing_page_url or "",
-        "page_url": order.page_url or "",
-        "purchase_event_id": order.purchase_event_id or "",
-        "vpn_proxy": is_vpn_proxy,
-        "notes": "",
+        "order_id":        order.public_order_number,
+        "date":            _format_date(order.created_at),
+        "country":         country_name,
+        "name":            order.customer_name,
+        "phone":           order.customer_phone_e164,
+        "address":         order.customer_address or "",
+        "url":             url,
+        "sku":             "/".join(skus),
+        "product":         "/".join(product_names),
+        "quantity":        "/".join(quantities),
+        "price":           price,
+        "currency":        currency,
+        "notes":           "",
+        "utm_source":      order.utm_source or "",
+        "utm_medium":      order.utm_medium or "",
+        "utm_campaign":    order.utm_campaign or "",
+        "utm_term":        order.utm_term or "",
+        "utm_content":     order.utm_content or "",
+        "national_address": order.customer_address or "",
+        "spend":           "",
+        "orders":          "",
+        "cpl":             "",
+        "status":          "",
     }
 
 
@@ -85,16 +146,10 @@ async def send_to_sheets(
         return {"status": "skipped", "reason": "not_configured"}
 
     payload = {
-        "secret": settings.google_sheets_webhook_secret,
-        "order": build_order_payload(
+        "order": build_sheets_row(
             order=order,
             items=items,
-            fraud_decision=fraud_decision,
-            fraud_reason=fraud_reason,
             country_iso=country_iso,
-            risk_score=risk_score,
-            ip_risk=ip_risk,
-            is_vpn_proxy=is_vpn_proxy,
         ),
     }
 
@@ -124,8 +179,7 @@ async def send_rejected_attempt_to_sheets(
     ip_risk: float | None = None,
 ) -> dict:
     """
-    Push a *rejected* (or fraud-flagged) order attempt to the Google Sheet so
-    the operator can see every attempt — not only successful orders.
+    Push a rejected order attempt to the Google Sheet.
     Never raises.
     """
     settings = get_settings()
@@ -134,51 +188,60 @@ async def send_rejected_attempt_to_sheets(
         logger.warning("sheets_webhook_not_configured_rejected")
         return {"status": "skipped", "reason": "not_configured"}
 
-    items_summary = "; ".join(
-        f"{item.quantity}x {item.product_id}" for item in req.items
-    )
-    item_count = sum(item.quantity for item in req.items)
+    # Derive country
+    from app.core.security import COUNTRY_PHONE_PATTERNS
+    phone_iso = ""
+    for _cc, pattern, iso in COUNTRY_PHONE_PATTERNS:
+        if pattern.match(phone_e164):
+            phone_iso = iso
+            break
+    effective_iso = phone_iso or country_iso or ""
+    country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
+    currency = req.pricing.currency or COUNTRY_CURRENCY.get(effective_iso, "SAR")
+
+    # Build product/sku/qty strings from request items
+    skus: list[str] = []
+    product_names: list[str] = []
+    quantities: list[str] = []
+    for item in req.items:
+        product_info = get_product(item.product_id)
+        skus.append(product_info.sku if product_info else item.product_id)
+        product_names.append(product_info.name_ar if product_info else item.product_id)
+        quantities.append(str(item.quantity))
 
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     suffix = "".join(random.choices(string.digits, k=4))
-    public_number = f"BSH-REJ-{today}-{suffix}"
+    public_number = f"BAYT-REJ-{today}-{suffix}"
 
     tracking = req.tracking
     utm = tracking.utm if tracking else None
+    url = (tracking.landing_page_url or tracking.page_url or "") if tracking else ""
 
     payload = {
-        "secret": settings.google_sheets_webhook_secret,
         "order": {
-            "public_order_number": public_number,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-            "customer_name": req.customer.name,
-            "customer_phone": phone_e164 or req.customer.phone,
-            "items_summary": items_summary,
-            "item_count": item_count,
-            "subtotal_sar": req.pricing.subtotal_sar,
-            "shipping_sar": req.pricing.shipping_sar,
-            "total_sar": req.pricing.total_sar,
-            "display_currency": req.pricing.currency or "SAR",
-            "display_total": req.pricing.total_sar,
-            "payment_method": "COD",
-            "status": "rejected",
-            "confirmation_status": "rejected",
-            "is_test_order": False,
-            "fraud_decision": "rejected",
-            "fraud_reason": fraud_reason,
-            "ip_country": country_iso or "",
-            "risk_score": risk_score if risk_score is not None else "",
-            "ip_risk": ip_risk if ip_risk is not None else "",
-            "utm_source": utm.source if utm else "",
-            "utm_medium": utm.medium if utm else "",
-            "utm_campaign": utm.campaign if utm else "",
-            "utm_content": utm.content if utm else "",
-            "utm_term": utm.term if utm else "",
-            "landing_page_url": tracking.landing_page_url if tracking else "",
-            "page_url": tracking.page_url if tracking else "",
-            "purchase_event_id": tracking.purchase_event_id if tracking else "",
-            "vpn_proxy": is_vpn_proxy,
-            "notes": f"REJECTED ATTEMPT - IP: {client_ip}",
+            "order_id":        public_number,
+            "date":            datetime.now(timezone.utc).strftime("%d/%m/%Y"),
+            "country":         country_name,
+            "name":            req.customer.name,
+            "phone":           phone_e164 or req.customer.phone,
+            "address":         req.customer.address or "",
+            "url":             url,
+            "sku":             "/".join(skus),
+            "product":         "/".join(product_names),
+            "quantity":        "/".join(quantities),
+            "price":           float(req.pricing.total_sar),
+            "currency":        currency,
+            "notes":           f"REJECTED - {fraud_reason} - IP: {client_ip}",
+            "utm_source":      utm.source if utm else "",
+            "utm_medium":      utm.medium if utm else "",
+            "utm_campaign":    utm.campaign if utm else "",
+            "utm_term":        utm.term if utm else "",
+            "utm_content":     utm.content if utm else "",
+            "national_address": req.customer.address or "",
+            "spend":           "",
+            "orders":          "",
+            "cpl":             "",
+            "status":          "rejected",
         },
     }
 

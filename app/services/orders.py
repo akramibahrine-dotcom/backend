@@ -49,11 +49,11 @@ def get_client_ip(request: Request) -> str:
 
 
 async def generate_public_order_number(db: AsyncSession) -> str:
-    """Generate unique BSH-YYYYMMDD-XXXX order number."""
+    """Generate unique BAYT-YYYYMMDD-XXXX order number."""
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     while True:
         suffix = "".join(random.choices(string.digits, k=4))
-        number = f"BSH-{today}-{suffix}"
+        number = f"BAYT-{today}-{suffix}"
         existing = await db.execute(
             select(Order).where(Order.public_order_number == number)
         )
@@ -352,6 +352,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         customer_name=req.customer.name,
         customer_phone_e164=phone_e164,
         customer_phone_local=phone_local,
+        customer_address=req.customer.address or None,
         is_test_order=is_test or fraud_result.is_test,
         subtotal_sar=expected_total - shipping,
         shipping_sar=shipping,
