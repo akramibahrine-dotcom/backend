@@ -132,45 +132,60 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
     order_id = str(uuid.uuid4())
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     suffix = "".join(random.choices(string.digits, k=4))
-    public_number = f"BSH-{today}-{suffix}"
+    public_number = f"BAYT-{today}-{suffix}"
 
     # Send to Google Sheets as the primary record
     if settings.google_sheets_webhook_url:
         tracking = req.tracking
         utm = tracking.utm if tracking else None
+        today_str = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+
+        from app.services.sheets import COUNTRY_NAMES, COUNTRY_CURRENCY, _country_from_phone
+        phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
+        phone_iso = _country_from_phone(phone_for_country)
+        country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
+        currency = req.pricing.currency or COUNTRY_CURRENCY.get(phone_iso, "SAR")
+
+        skus = []
+        names = []
+        qtys = []
+        for item in req.items:
+            p = get_product(item.product_id)
+            skus.append(p.sku if p else item.product_id)
+            names.append(p.name_ar if p else item.product_id)
+            qtys.append(str(item.quantity))
+        if req.upsell and req.upsell.accepted and req.upsell.product_id:
+            up = get_product(req.upsell.product_id)
+            if up:
+                skus.append(up.sku)
+                names.append(up.name_ar)
+                qtys.append("1")
+
         payload = {
-            "secret": settings.google_sheets_webhook_secret,
             "order": {
-                "public_order_number": public_number,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "customer_name": req.customer.name,
-                "customer_phone": req.customer.phone,
-                "items_summary": "; ".join(items_summary_parts),
-                "item_count": sum(item.quantity for item in req.items),
-                "subtotal_sar": total_sar - req.pricing.shipping_sar,
-                "shipping_sar": req.pricing.shipping_sar,
-                "total_sar": total_sar,
-                "display_currency": req.pricing.currency or "SAR",
-                "display_total": total_sar,
-                "payment_method": "COD",
-                "status": "pending_confirmation",
-                "confirmation_status": "pending",
-                "is_test_order": is_test,
-                "fraud_decision": "skipped_db_fallback",
-                "fraud_reason": "database_unavailable",
-                "ip_country": "",
-                "risk_score": "",
-                "ip_risk": "",
-                "utm_source": utm.source if utm else "",
-                "utm_medium": utm.medium if utm else "",
-                "utm_campaign": utm.campaign if utm else "",
-                "utm_content": utm.content if utm else "",
-                "utm_term": utm.term if utm else "",
-                "landing_page_url": tracking.landing_page_url if tracking else "",
-                "page_url": tracking.page_url if tracking else "",
-                "purchase_event_id": tracking.purchase_event_id if tracking else "",
-                "vpn_proxy": "",
-                "notes": f"FALLBACK ORDER - DB unavailable. IP: {client_ip}",
+                "order_id":        public_number,
+                "date":            today_str,
+                "country":         country_name,
+                "name":            req.customer.name,
+                "phone":           phone_for_country,
+                "address":         getattr(req.customer, "address", None) or "",
+                "url":             (tracking.landing_page_url or tracking.page_url or "") if tracking else "",
+                "sku":             "/".join(skus),
+                "product":         "/".join(names),
+                "quantity":        "/".join(qtys),
+                "price":           float(total_sar),
+                "currency":        currency,
+                "notes":           f"FALLBACK - DB unavailable. IP: {client_ip}",
+                "utm_source":      utm.source if utm else "",
+                "utm_medium":      utm.medium if utm else "",
+                "utm_campaign":    utm.campaign if utm else "",
+                "utm_term":        utm.term if utm else "",
+                "utm_content":     utm.content if utm else "",
+                "national_address": getattr(req.customer, "address", None) or "",
+                "spend":           "",
+                "orders":          "",
+                "cpl":             "",
+                "status":          "pending_confirmation",
             },
         }
         try:
