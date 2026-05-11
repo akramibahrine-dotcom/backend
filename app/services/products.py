@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-
 BUNDLE_PRICES: dict[int, int] = {
     1: 199,
     2: 279,
@@ -34,6 +33,10 @@ class ProductInfo:
     product_id: str
     name_ar: str
     sku: str
+    slug: str
+    concern_ar: str
+    upsell_product_id: str
+    cross_sell_product_ids: tuple[str, ...]
 
 
 PRODUCTS: dict[str, ProductInfo] = {
@@ -41,31 +44,55 @@ PRODUCTS: dict[str, ProductInfo] = {
         product_id="weight-support-tea",
         name_ar="شاي عشبي لدعم إدارة الوزن",
         sku="BAYT-WST-001",
+        slug="weight-support-tea",
+        concern_ar="مرافقة إدارة الوزن",
+        upsell_product_id="colon-comfort-tea",
+        cross_sell_product_ids=("colon-comfort-tea", "liver-wellness-tea"),
     ),
     "colon-comfort-tea": ProductInfo(
         product_id="colon-comfort-tea",
         name_ar="شاي عشبي لراحة القولون والغازات",
         sku="BAYT-CCT-002",
+        slug="colon-comfort-tea",
+        concern_ar="راحة القولون والغازات",
+        upsell_product_id="liver-wellness-tea",
+        cross_sell_product_ids=("weight-support-tea", "hemorrhoid-comfort-tea"),
     ),
     "hemorrhoid-comfort-tea": ProductInfo(
         product_id="hemorrhoid-comfort-tea",
         name_ar="شاي عشبي لدعم الراحة مع البواسير",
         sku="BAYT-HCT-003",
+        slug="hemorrhoid-comfort-tea",
+        concern_ar="راحة يومية مع البواسير",
+        upsell_product_id="colon-comfort-tea",
+        cross_sell_product_ids=("colon-comfort-tea", "liver-wellness-tea"),
     ),
     "liver-wellness-tea": ProductInfo(
         product_id="liver-wellness-tea",
         name_ar="شاي عشبي لدعم صحة الكبد",
         sku="BAYT-LWT-004",
+        slug="liver-wellness-tea",
+        concern_ar="مرافقة عافية الكبد",
+        upsell_product_id="weight-support-tea",
+        cross_sell_product_ids=("weight-support-tea", "colon-comfort-tea"),
     ),
     "lung-smoking-support-tea": ProductInfo(
         product_id="lung-smoking-support-tea",
         name_ar="شاي عشبي لدعم الرئة وتقليل آثار التدخين",
         sku="BAYT-LST-005",
+        slug="lung-smoking-support-tea",
+        concern_ar="مرافقة الصدر وآثار التدخين",
+        upsell_product_id="liver-wellness-tea",
+        cross_sell_product_ids=("liver-wellness-tea", "colon-comfort-tea"),
     ),
     "prostate-wellness-tea": ProductInfo(
         product_id="prostate-wellness-tea",
         name_ar="شاي عشبي لدعم صحة البروستات",
         sku="BAYT-PWT-006",
+        slug="prostate-wellness-tea",
+        concern_ar="مرافقة عافية البروستات",
+        upsell_product_id="liver-wellness-tea",
+        cross_sell_product_ids=("liver-wellness-tea", "lung-smoking-support-tea"),
     ),
 }
 
@@ -81,15 +108,11 @@ def validate_bundle_price(
     *,
     welcome_discount: bool = False,
 ) -> bool:
-    """Catalog bundle price, or discounted price when welcome promo is active."""
+    """Validate server-authoritative catalog bundle price."""
     if quantity not in BUNDLE_PRICES:
         return False
     expected = BUNDLE_PRICES[quantity]
-    if price_sar == expected:
-        return True
-    if welcome_discount and price_sar == discounted_amount(expected):
-        return True
-    return False
+    return price_sar == expected
 
 
 def validate_upsell(
@@ -99,10 +122,7 @@ def validate_upsell(
     *,
     welcome_discount: bool = False,
 ) -> bool:
-    allowed = {UPSELL_PRICE_SAR}
-    if welcome_discount:
-        allowed.add(discounted_amount(UPSELL_PRICE_SAR))
-    if price_sar not in allowed:
+    if price_sar != UPSELL_PRICE_SAR:
         return False
     if get_product(product_id) is None:
         return False

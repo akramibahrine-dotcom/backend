@@ -96,6 +96,37 @@ async def check_fraud(
         )
 
 
+async def check_ip_quality(
+    ip_address: str,
+    user_agent: str | None,
+    allowed_countries: set[str] | None = None,
+) -> FraudDecision:
+    """Validate an analytics IP without customer/order data."""
+    settings = get_settings()
+    allowed = allowed_countries or settings.get_analytics_allowed_countries()
+
+    if not settings.maxmind_configured:
+        return FraudDecision(
+            allowed=True,
+            decision="allowed",
+            reason="maxmind_not_configured",
+        )
+
+    try:
+        result = await _call_maxmind_ip_only(
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        return _evaluate_result(result, settings, allowed_countries=allowed)
+    except Exception as exc:
+        logger.warning("ip_quality_check_failed", ip=ip_address, error=str(exc))
+        return FraudDecision(
+            allowed=False,
+            decision="ignored",
+            reason="provider_error",
+        )
+
+
 @retry(
     stop=stop_after_attempt(2),
     wait=wait_exponential(multiplier=1, min=1, max=4),
@@ -147,7 +178,40 @@ async def _call_maxmind(
         return response.json()
 
 
-def _evaluate_result(data: dict, settings) -> FraudDecision:
+@retry(
+    stop=stop_after_attempt(2),
+    wait=wait_exponential(multiplier=1, min=1, max=4),
+    reraise=True,
+)
+async def _call_maxmind_ip_only(
+    ip_address: str,
+    user_agent: str | None,
+) -> dict:
+    settings = get_settings()
+    payload = {
+        "device": {
+            "ip_address": ip_address,
+        },
+        "event": {
+            "shop_id": "baytseha",
+            "time": datetime.now(timezone.utc).isoformat(),
+        },
+    }
+    if user_agent:
+        payload["device"]["user_agent"] = user_agent
+
+    async with httpx.AsyncClient(timeout=_MAXMIND_TIMEOUT) as client:
+        response = await client.post(
+            settings.maxmind_minfraud_endpoint,
+            json=payload,
+            auth=(settings.maxmind_account_id, settings.maxmind_license_key),
+            headers={"Accept": "application/json"},
+        )
+        response.raise_for_status()
+        return response.json()
+
+
+def _evaluate_result(data: dict, settings, allowed_countries: set[str] | None = None) -> FraudDecision:
     """Apply fraud decision logic from the MaxMind response."""
     ip_data = data.get("ip_address", {})
     traits = ip_data.get("traits", {})
@@ -156,8 +220,8 @@ def _evaluate_result(data: dict, settings) -> FraudDecision:
     ip_risk = ip_data.get("risk")
     country_iso = country.get("iso_code")
 
-    allowed_countries = settings.get_allowed_countries()
-    if allowed_countries and country_iso not in allowed_countries:
+    country_allowlist = allowed_countries if allowed_countries is not None else settings.get_allowed_countries()
+    if country_allowlist and country_iso not in country_allowlist:
         return FraudDecision(
             allowed=False,
             decision="rejected",

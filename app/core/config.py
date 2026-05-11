@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://baytseha:baytseha_dev@localhost:5432/baytseha"
     run_migrations_on_start: bool = True
 
+    # Admin
+    admin_username: str = ""
+    admin_password: str = ""
+
     # Phone / Testing
     test_phone_whitelist: str = "0501234987"
     trust_proxy_headers: bool = True
@@ -36,6 +40,7 @@ class Settings(BaseSettings):
     maxmind_max_risk_score: float = 25.0
     maxmind_max_ip_risk: float = 10.0
     maxmind_allowed_countries: str = "SA,QA,BH,OM,LY,IQ,AE,LB,KW"
+    analytics_allowed_countries: str = "SA"
     maxmind_block_anonymous_ip: bool = True
     fraud_provider_failure_mode: Literal["reject", "allow"] = "reject"
 
@@ -94,6 +99,9 @@ class Settings(BaseSettings):
 
     def get_allowed_countries(self) -> set[str]:
         return {c.strip().upper() for c in self.maxmind_allowed_countries.split(",") if c.strip()}
+
+    def get_analytics_allowed_countries(self) -> set[str]:
+        return {c.strip().upper() for c in self.analytics_allowed_countries.split(",") if c.strip()}
 
 
 @lru_cache
