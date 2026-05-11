@@ -270,7 +270,7 @@ async def send_rejected_attempt_to_sheets(
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), reraise=True)
 async def _post_to_sheets(url: str, payload: dict) -> dict:
-    async with httpx.AsyncClient(timeout=15.0) as client:
+    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
         response = await client.post(
             url,
             json=payload,
