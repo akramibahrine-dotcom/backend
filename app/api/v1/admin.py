@@ -708,6 +708,22 @@ async def update_access_rule(
     return _access_rule_response(row)
 
 
+@router.delete(
+    "/admin/access-rules/{rule_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+async def delete_access_rule(
+    rule_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    row = await db.get(AdminAccessRule, rule_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Access rule not found.")
+    await db.delete(row)
+    await db.commit()
+
+
 @router.get("/admin/translations", response_model=TranslationOverridesResponse, dependencies=[Depends(require_admin)])
 async def list_translations(db: Annotated[AsyncSession, Depends(get_db)]) -> TranslationOverridesResponse:
     rows = (
@@ -747,6 +763,22 @@ async def update_translation(
     await db.commit()
     await db.refresh(row)
     return _translation_response(row)
+
+
+@router.delete(
+    "/admin/translations/{translation_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_admin)],
+)
+async def delete_translation(
+    translation_id: str,
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> None:
+    row = await db.get(StoreTranslationOverride, translation_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Translation override not found.")
+    await db.delete(row)
+    await db.commit()
 
 
 @router.get("/store/translations")
