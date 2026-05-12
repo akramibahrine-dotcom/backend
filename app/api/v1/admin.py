@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import and_, case, desc, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -711,17 +711,19 @@ async def update_access_rule(
 @router.delete(
     "/admin/access-rules/{rule_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
     dependencies=[Depends(require_admin)],
 )
 async def delete_access_rule(
     rule_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> None:
+) -> Response:
     row = await db.get(AdminAccessRule, rule_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Access rule not found.")
     await db.delete(row)
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/admin/translations", response_model=TranslationOverridesResponse, dependencies=[Depends(require_admin)])
@@ -768,17 +770,19 @@ async def update_translation(
 @router.delete(
     "/admin/translations/{translation_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    response_class=Response,
     dependencies=[Depends(require_admin)],
 )
 async def delete_translation(
     translation_id: str,
     db: Annotated[AsyncSession, Depends(get_db)],
-) -> None:
+) -> Response:
     row = await db.get(StoreTranslationOverride, translation_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Translation override not found.")
     await db.delete(row)
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/store/translations")
