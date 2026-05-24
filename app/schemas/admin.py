@@ -54,6 +54,10 @@ class AdminMetricsResponse(BaseModel):
     traffic_sources: list[dict]
     device_breakdown: list[dict]
     country_breakdown: list[dict]
+    order_status_breakdown: list[dict]
+    funnel: list[dict]
+    utm_source_breakdown: list[dict]
+    risk_breakdown: list[dict]
 
 
 class AdminOrderItem(BaseModel):
@@ -78,6 +82,8 @@ class AdminOrderListItem(BaseModel):
     country_iso_code: str | None = None
     fraud_decision: str | None = None
     fraud_reason: str | None = None
+    risk_score: float | None = None
+    ip_risk: float | None = None
 
 
 class AdminOrdersResponse(BaseModel):
@@ -99,6 +105,12 @@ class AdminOrderDetail(AdminOrderListItem):
     utm_term: str | None = None
     risk_score: float | None = None
     ip_risk: float | None = None
+    is_anonymous_proxy: bool | None = None
+    is_anonymous_vpn: bool | None = None
+    is_hosting_provider: bool | None = None
+    is_public_proxy: bool | None = None
+    is_residential_proxy: bool | None = None
+    is_tor_exit_node: bool | None = None
     items: list[AdminOrderItem]
     tracking_events: list[dict]
     webhook_deliveries: list[dict]

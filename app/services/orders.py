@@ -391,9 +391,15 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         ip_address=client_ip,
         decision=fraud_result.decision,
         reason=fraud_result.reason,
-        country_iso_code=fraud_result.country_iso_code,
+        country_iso_code=fraud_result.country_iso_code or ip_iso_fallback,
         risk_score=fraud_result.risk_score,
         ip_risk=fraud_result.ip_risk,
+        is_anonymous_proxy=fraud_result.is_anonymous_proxy,
+        is_anonymous_vpn=fraud_result.is_anonymous_vpn,
+        is_hosting_provider=fraud_result.is_hosting_provider,
+        is_public_proxy=fraud_result.is_public_proxy,
+        is_residential_proxy=fraud_result.is_residential_proxy,
+        is_tor_exit_node=fraud_result.is_tor_exit_node,
         raw_response=fraud_result.raw_response,
     )
     db.add(fraud_record)

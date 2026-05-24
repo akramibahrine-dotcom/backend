@@ -102,6 +102,19 @@ def _valid_order_filter(start: datetime, end: datetime):
     )
 
 
+def _valid_ksa_fraud_filter():
+    return and_(
+        FraudCheck.country_iso_code == "SA",
+        FraudCheck.decision.in_(["allowed", "allowed_test", "error_allow"]),
+        or_(FraudCheck.is_anonymous_proxy.is_(False), FraudCheck.is_anonymous_proxy.is_(None)),
+        or_(FraudCheck.is_anonymous_vpn.is_(False), FraudCheck.is_anonymous_vpn.is_(None)),
+        or_(FraudCheck.is_hosting_provider.is_(False), FraudCheck.is_hosting_provider.is_(None)),
+        or_(FraudCheck.is_public_proxy.is_(False), FraudCheck.is_public_proxy.is_(None)),
+        or_(FraudCheck.is_residential_proxy.is_(False), FraudCheck.is_residential_proxy.is_(None)),
+        or_(FraudCheck.is_tor_exit_node.is_(False), FraudCheck.is_tor_exit_node.is_(None)),
+    )
+
+
 async def _period_stats(db: AsyncSession, start: datetime, end: datetime) -> dict:
     clicks = await db.scalar(
         select(func.count(SiteClick.id)).where(
@@ -250,6 +263,10 @@ async def track_click(
     if not quality.allowed:
         return TrackClickResponse(accepted=False, reason=quality.reason)
 
+    effective_country = (quality.country_iso_code or country or "").upper()
+    if effective_country not in settings.get_analytics_allowed_countries():
+        return TrackClickResponse(accepted=False, reason="country_not_verified")
+
     utm = req.utm
     db.add(
         SiteClick(
@@ -269,7 +286,7 @@ async def track_click(
             utm_term=utm.term if utm else None,
             ip_address=client_ip,
             user_agent=user_agent,
-            country_iso_code=quality.country_iso_code or country,
+            country_iso_code=effective_country,
             risk_score=quality.risk_score,
             ip_risk=quality.ip_risk,
             is_valid_ksa=True,
@@ -522,6 +539,82 @@ async def admin_metrics(
             )
         ).all()
     ]
+    order_status_breakdown = [
+        {"status": row.status or "unknown", "orders": int(row.orders or 0), "revenue_sar": int(row.revenue_sar or 0)}
+        for row in (
+            await db.execute(
+                select(
+                    Order.status.label("status"),
+                    func.count(distinct(Order.id)).label("orders"),
+                    func.coalesce(func.sum(Order.total_sar), 0).label("revenue_sar"),
+                )
+                .join(FraudCheck, FraudCheck.order_id == Order.id)
+                .where(order_filter)
+                .group_by(Order.status)
+                .order_by(desc("orders"))
+            )
+        ).all()
+    ]
+    funnel_events = ["page_view", "view_content", "add_to_cart", "initiate_checkout"]
+    funnel_clicks = {
+        row.event_name: int(row.count or 0)
+        for row in (
+            await db.execute(
+                select(SiteClick.event_name, func.count(SiteClick.id).label("count"))
+                .where(
+                    SiteClick.created_at >= start_dt,
+                    SiteClick.created_at <= end_dt,
+                    SiteClick.is_valid_ksa.is_(True),
+                    SiteClick.event_name.in_(funnel_events),
+                )
+                .group_by(SiteClick.event_name)
+            )
+        ).all()
+    }
+    funnel = [
+        {"step": "Page views", "count": funnel_clicks.get("page_view", 0)},
+        {"step": "Product views", "count": funnel_clicks.get("view_content", 0)},
+        {"step": "Add to cart", "count": funnel_clicks.get("add_to_cart", 0)},
+        {"step": "Checkout starts", "count": funnel_clicks.get("initiate_checkout", 0)},
+        {"step": "Orders", "count": orders},
+    ]
+    utm_source_breakdown = [
+        {
+            "source": row.source or "Direct / unknown",
+            "orders": int(row.orders or 0),
+            "revenue_sar": int(row.revenue_sar or 0),
+        }
+        for row in (
+            await db.execute(
+                select(
+                    Order.utm_source.label("source"),
+                    func.count(distinct(Order.id)).label("orders"),
+                    func.coalesce(func.sum(Order.total_sar), 0).label("revenue_sar"),
+                )
+                .join(FraudCheck, FraudCheck.order_id == Order.id)
+                .where(order_filter)
+                .group_by(Order.utm_source)
+                .order_by(desc("revenue_sar"))
+                .limit(8)
+            )
+        ).all()
+    ]
+    risk_breakdown = [
+        {"reason": row.reason or "unknown", "attempts": int(row.attempts or 0)}
+        for row in (
+            await db.execute(
+                select(FraudCheck.reason.label("reason"), func.count(FraudCheck.id).label("attempts"))
+                .where(
+                    FraudCheck.created_at >= start_dt,
+                    FraudCheck.created_at <= end_dt,
+                    FraudCheck.decision.in_(["rejected", "error_reject", "ignored"]),
+                )
+                .group_by(FraudCheck.reason)
+                .order_by(desc("attempts"))
+                .limit(8)
+            )
+        ).all()
+    ]
 
     return AdminMetricsResponse(
         start_date=start_dt,
@@ -546,6 +639,10 @@ async def admin_metrics(
         traffic_sources=traffic_sources,
         device_breakdown=device_breakdown,
         country_breakdown=country_breakdown,
+        order_status_breakdown=order_status_breakdown,
+        funnel=funnel,
+        utm_source_breakdown=utm_source_breakdown,
+        risk_breakdown=risk_breakdown,
     )
 
 
@@ -555,13 +652,17 @@ async def admin_orders(
     start: Annotated[datetime | None, Query()] = None,
     end: Annotated[datetime | None, Query()] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    valid_ksa_only: Annotated[bool, Query()] = True,
 ) -> AdminOrdersResponse:
     start_dt, end_dt = _date_window(start, end)
+    filters = [Order.created_at >= start_dt, Order.created_at <= end_dt]
+    if valid_ksa_only:
+        filters.append(_valid_ksa_fraud_filter())
     rows = (
         await db.execute(
             select(Order, FraudCheck)
             .join(FraudCheck, FraudCheck.order_id == Order.id, isouter=True)
-            .where(Order.created_at >= start_dt, Order.created_at <= end_dt)
+            .where(*filters)
             .order_by(Order.created_at.desc())
             .limit(limit)
         )
@@ -608,6 +709,12 @@ async def admin_order_detail(
         utm_term=order.utm_term,
         risk_score=float(fraud.risk_score) if fraud and fraud.risk_score is not None else None,
         ip_risk=float(fraud.ip_risk) if fraud and fraud.ip_risk is not None else None,
+        is_anonymous_proxy=fraud.is_anonymous_proxy if fraud else None,
+        is_anonymous_vpn=fraud.is_anonymous_vpn if fraud else None,
+        is_hosting_provider=fraud.is_hosting_provider if fraud else None,
+        is_public_proxy=fraud.is_public_proxy if fraud else None,
+        is_residential_proxy=fraud.is_residential_proxy if fraud else None,
+        is_tor_exit_node=fraud.is_tor_exit_node if fraud else None,
         items=[
             AdminOrderItem(
                 product_id=item.product_id,
@@ -852,6 +959,8 @@ def _order_list_item(order: Order, fraud: FraudCheck | None) -> AdminOrderListIt
         country_iso_code=fraud.country_iso_code if fraud else None,
         fraud_decision=fraud.decision if fraud else None,
         fraud_reason=fraud.reason if fraud else None,
+        risk_score=float(fraud.risk_score) if fraud and fraud.risk_score is not None else None,
+        ip_risk=float(fraud.ip_risk) if fraud and fraud.ip_risk is not None else None,
     )
 
 
