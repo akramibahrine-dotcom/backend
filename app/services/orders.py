@@ -39,6 +39,12 @@ KSA_MOBILE_RE = re.compile(r"^(?:\+966|00966|966|0)?5[0-9]{8}$")
 def get_client_ip(request: Request) -> str:
     settings = get_settings()
     if settings.trust_proxy_headers:
+        cf_ip = request.headers.get("cf-connecting-ip")
+        if cf_ip:
+            return cf_ip.split(",")[0].strip()
+        true_client = request.headers.get("true-client-ip")
+        if true_client:
+            return true_client.split(",")[0].strip()
         xff = request.headers.get("x-forwarded-for")
         if xff:
             return xff.split(",")[0].strip()
@@ -293,6 +299,18 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
 
     # Re-check IP/phone match using whichever country signal we got (MaxMind preferred)
     effective_ip_iso = fraud_result.country_iso_code or ip_iso_fallback
+    
+    if not is_test and allowed_countries:
+        if not effective_ip_iso:
+            logger.warning("country_resolution_failed_blocking", ip=client_ip)
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "order_rejected",
+                    "message": "عذرًا، لم نتمكن من التحقق من بلد الاتصال. يرجى التأكد من عدم استخدام بروكسي أو المحاولة لاحقًا.",
+                },
+            )
+            
     if (
         not is_test
         and phone_iso
