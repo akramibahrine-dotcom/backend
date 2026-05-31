@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     maxmind_minfraud_endpoint: str = "https://minfraud.maxmind.com/minfraud/v2.0/insights"
     maxmind_max_risk_score: float = 25.0
     maxmind_max_ip_risk: float = 10.0
-    maxmind_allowed_countries: str = "SA,QA,BH,OM,LY,IQ,AE,LB,KW"
-    analytics_allowed_countries: str = "SA"
+    maxmind_allowed_countries: str = "SA,AE,KW,QA,BH,OM,LB,IQ,LY"
+    analytics_allowed_countries: str = "SA,AE,KW,QA,BH,OM,LB,IQ,LY"
     maxmind_block_anonymous_ip: bool = True
     fraud_provider_failure_mode: Literal["reject", "allow"] = "reject"
 

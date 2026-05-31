@@ -58,50 +58,41 @@ class TestFraudDecisionLogic:
         assert result.allowed is False
         assert result.reason == "country_not_allowed"
 
-    def test_high_risk_score_rejected(self):
+    def test_high_risk_score_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(risk_score=30), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "high_risk_score"
+        assert result.allowed is True
 
-    def test_high_ip_risk_rejected(self):
+    def test_high_ip_risk_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(ip_risk=15), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "high_ip_risk"
+        assert result.allowed is True
 
-    def test_anonymous_ip_rejected(self):
+    def test_anonymous_ip_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_anonymous=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "anonymous_ip"
+        assert result.allowed is True
 
-    def test_vpn_rejected(self):
+    def test_vpn_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_anonymous_vpn=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "anonymous_vpn"
+        assert result.allowed is True
 
-    def test_proxy_rejected(self):
+    def test_proxy_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_anonymous_proxy=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "anonymous_proxy"
+        assert result.allowed is True
 
-    def test_hosting_provider_rejected(self):
+    def test_hosting_provider_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_hosting_provider=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "hosting_provider"
+        assert result.allowed is True
 
-    def test_public_proxy_rejected(self):
+    def test_public_proxy_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_public_proxy=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "public_proxy"
+        assert result.allowed is True
 
-    def test_residential_proxy_rejected(self):
+    def test_residential_proxy_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_residential_proxy=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "residential_proxy"
+        assert result.allowed is True
 
-    def test_tor_exit_node_rejected(self):
+    def test_tor_exit_node_allowed_for_valid_country(self):
         result = _evaluate_result(make_response(is_tor_exit_node=True), SETTINGS)
-        assert result.allowed is False
-        assert result.reason == "tor_exit_node"
+        assert result.allowed is True
 
     def test_ksa_at_exact_threshold_allowed(self):
         result = _evaluate_result(make_response(risk_score=25.0, ip_risk=10.0), SETTINGS)

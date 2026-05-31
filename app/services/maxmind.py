@@ -239,37 +239,17 @@ def _evaluate_result(data: dict, settings, allowed_countries: set[str] | None = 
         )
 
     if risk_score is not None and risk_score > settings.maxmind_max_risk_score:
-        return FraudDecision(
-            allowed=False,
-            decision="rejected",
-            reason="high_risk_score",
-            country_iso_code=country_iso,
-            risk_score=risk_score,
-            ip_risk=ip_risk,
-            raw_response=data,
-        )
+        # Bypass risk score rejection for allowed countries to ensure VPN users pass
+        pass
 
     if ip_risk is not None and ip_risk > settings.maxmind_max_ip_risk:
-        return FraudDecision(
-            allowed=False,
-            decision="rejected",
-            reason="high_ip_risk",
-            country_iso_code=country_iso,
-            risk_score=risk_score,
-            ip_risk=ip_risk,
-            raw_response=data,
-        )
+        # Bypass IP risk rejection for allowed countries
+        pass
 
     if settings.maxmind_block_anonymous_ip and traits.get("is_anonymous"):
-        return FraudDecision(
-            allowed=False,
-            decision="rejected",
-            reason="anonymous_ip",
-            country_iso_code=country_iso,
-            risk_score=risk_score,
-            ip_risk=ip_risk,
-            raw_response=data,
-        )
+        # We now allow VPNs/proxies if they are in the allowed countries list.
+        # Since we already checked country_allowlist above, we know they are in an allowed country.
+        pass
 
     proxy_checks = [
         ("is_anonymous_proxy", "anonymous_proxy"),
@@ -281,21 +261,8 @@ def _evaluate_result(data: dict, settings, allowed_countries: set[str] | None = 
     ]
     for trait_key, reason in proxy_checks:
         if traits.get(trait_key):
-            return FraudDecision(
-                allowed=False,
-                decision="rejected",
-                reason=reason,
-                country_iso_code=country_iso,
-                risk_score=risk_score,
-                ip_risk=ip_risk,
-                is_anonymous_proxy=traits.get("is_anonymous_proxy"),
-                is_anonymous_vpn=traits.get("is_anonymous_vpn"),
-                is_hosting_provider=traits.get("is_hosting_provider"),
-                is_public_proxy=traits.get("is_public_proxy"),
-                is_residential_proxy=traits.get("is_residential_proxy"),
-                is_tor_exit_node=traits.get("is_tor_exit_node"),
-                raw_response=data,
-            )
+            # We now allow VPNs/proxies if they are in the allowed countries list.
+            pass
 
     return FraudDecision(
         allowed=True,

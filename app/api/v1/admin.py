@@ -91,27 +91,15 @@ def _valid_order_filter(start: datetime, end: datetime):
         Order.created_at >= start,
         Order.created_at <= end,
         Order.is_test_order.is_(False),
-        FraudCheck.country_iso_code == "SA",
+        FraudCheck.country_iso_code.in_(["SA", "AE", "KW", "QA", "BH", "OM", "LB", "IQ", "LY"]),
         FraudCheck.decision.in_(["allowed", "allowed_test", "error_allow"]),
-        or_(FraudCheck.is_anonymous_proxy.is_(False), FraudCheck.is_anonymous_proxy.is_(None)),
-        or_(FraudCheck.is_anonymous_vpn.is_(False), FraudCheck.is_anonymous_vpn.is_(None)),
-        or_(FraudCheck.is_hosting_provider.is_(False), FraudCheck.is_hosting_provider.is_(None)),
-        or_(FraudCheck.is_public_proxy.is_(False), FraudCheck.is_public_proxy.is_(None)),
-        or_(FraudCheck.is_residential_proxy.is_(False), FraudCheck.is_residential_proxy.is_(None)),
-        or_(FraudCheck.is_tor_exit_node.is_(False), FraudCheck.is_tor_exit_node.is_(None)),
     )
 
 
 def _valid_ksa_fraud_filter():
     return and_(
-        FraudCheck.country_iso_code == "SA",
+        FraudCheck.country_iso_code.in_(["SA", "AE", "KW", "QA", "BH", "OM", "LB", "IQ", "LY"]),
         FraudCheck.decision.in_(["allowed", "allowed_test", "error_allow"]),
-        or_(FraudCheck.is_anonymous_proxy.is_(False), FraudCheck.is_anonymous_proxy.is_(None)),
-        or_(FraudCheck.is_anonymous_vpn.is_(False), FraudCheck.is_anonymous_vpn.is_(None)),
-        or_(FraudCheck.is_hosting_provider.is_(False), FraudCheck.is_hosting_provider.is_(None)),
-        or_(FraudCheck.is_public_proxy.is_(False), FraudCheck.is_public_proxy.is_(None)),
-        or_(FraudCheck.is_residential_proxy.is_(False), FraudCheck.is_residential_proxy.is_(None)),
-        or_(FraudCheck.is_tor_exit_node.is_(False), FraudCheck.is_tor_exit_node.is_(None)),
     )
 
 
