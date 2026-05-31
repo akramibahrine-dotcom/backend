@@ -70,7 +70,7 @@ async def generate_public_order_number(db: AsyncSession) -> str:
 def _validate_phone(raw_phone: str, test_whitelist: str) -> tuple[str, str, str, str | None] | None:
     """Returns (e164, digits_no_plus, display, iso_country) or None."""
     cleaned = re.sub(r"[\s\-\(\).]", "", raw_phone)
-    if cleaned == test_whitelist:
+    if test_whitelist and cleaned == test_whitelist:
         return cleaned, cleaned, cleaned, None
     return normalize_phone(cleaned)
 
@@ -107,7 +107,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
     wl_raw = settings.test_phone_whitelist.strip()
     wl_digits = wl_raw.lstrip("+").lstrip("0")
     phone_tail = phone_e164.lstrip("+").lstrip("0")
-    is_test = phone_tail.endswith(wl_digits) or wl_digits.endswith(phone_tail)
+    is_test = bool(wl_digits) and (phone_tail.endswith(wl_digits) or wl_digits.endswith(phone_tail))
 
     # Idempotency check
     if req.idempotency_key:
