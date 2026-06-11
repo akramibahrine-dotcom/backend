@@ -8,6 +8,10 @@ BUNDLE_PRICES: dict[int, int] = {
     3: 349,
 }
 
+PRODUCT_BUNDLE_PRICES: dict[str, dict[int, int]] = {
+    "fertility-tea": {1: 299, 2: 549, 3: 699},
+}
+
 UPSELL_PRICE_SAR = 99
 
 WELCOME_DISCOUNT_PERCENT = 10
@@ -25,6 +29,8 @@ UPSELL_MAP: dict[str, str] = {
     "liver-wellness-tea": "weight-support-tea",
     "lung-smoking-support-tea": "liver-wellness-tea",
     "prostate-wellness-tea": "liver-wellness-tea",
+    "fertility-tea": "axis-y-serum",
+    "axis-y-serum": "weight-support-tea",
 }
 
 
@@ -94,6 +100,24 @@ PRODUCTS: dict[str, ProductInfo] = {
         upsell_product_id="liver-wellness-tea",
         cross_sell_product_ids=("liver-wellness-tea", "lung-smoking-support-tea"),
     ),
+    "fertility-tea": ProductInfo(
+        product_id="fertility-tea",
+        name_ar="شاي Fertility لمرافقة صحة الأنثى",
+        sku="BAYT-FTT-007",
+        slug="fertility-tea",
+        concern_ar="دعم صحة الأنثى والخصوبة",
+        upsell_product_id="axis-y-serum",
+        cross_sell_product_ids=("axis-y-serum", "weight-support-tea"),
+    ),
+    "axis-y-serum": ProductInfo(
+        product_id="axis-y-serum",
+        name_ar="سيروم اكسس واي لتصحيح البقع",
+        sku="BAYT-SKN-001",
+        slug="axis-y-serum",
+        concern_ar="توحيد لون البشرة وتصحيح البقع",
+        upsell_product_id="weight-support-tea",
+        cross_sell_product_ids=("colon-comfort-tea",),
+    ),
 }
 
 
@@ -109,9 +133,10 @@ def validate_bundle_price(
     welcome_discount: bool = False,
 ) -> bool:
     """Validate server-authoritative catalog bundle price."""
-    if quantity not in BUNDLE_PRICES:
+    prices = PRODUCT_BUNDLE_PRICES.get(product_id, BUNDLE_PRICES)
+    if quantity not in prices:
         return False
-    expected = BUNDLE_PRICES[quantity]
+    expected = prices[quantity]
     return price_sar == expected
 
 
@@ -129,7 +154,7 @@ def validate_upsell(
     for main_id in main_product_ids:
         if UPSELL_MAP.get(main_id) == product_id:
             return True
-    return get_product(product_id) is not None
+    return False
 
 
 def calculate_expected_total(items_total: int, upsell_total: int, shipping: int) -> int:

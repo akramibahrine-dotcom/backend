@@ -26,6 +26,7 @@ from app.services.products import (
     get_product,
     validate_bundle_price,
     validate_upsell,
+    discounted_amount,
 )
 from app.services.tracking import meta as meta_svc
 from app.services.tracking import snapchat as snap_svc
@@ -180,7 +181,8 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             ))
 
     shipping = req.pricing.shipping_sar
-    expected_total = items_total + upsell_total + shipping
+    expected_items_total = discounted_amount(items_total) if welcome_active else items_total
+    expected_total = expected_items_total + upsell_total + shipping
 
     if req.pricing.total_sar != expected_total:
         raise HTTPException(
