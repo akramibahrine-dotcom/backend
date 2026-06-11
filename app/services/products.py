@@ -102,7 +102,7 @@ PRODUCTS: dict[str, ProductInfo] = {
     ),
     "fertility-tea": ProductInfo(
         product_id="fertility-tea",
-        name_ar="شاي Fertility لمرافقة صحة الأنثى",
+        name_ar="شاي الخصوبة الجنسية من بيت الصحه",
         sku="BAYT-FTT-007",
         slug="fertility-tea",
         concern_ar="دعم صحة الأنثى والخصوبة",
