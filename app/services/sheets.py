@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import random
+import re
 import string
 from datetime import datetime, timezone
 
@@ -55,6 +56,16 @@ def _format_date(dt: datetime | None) -> str:
     if not dt:
         dt = datetime.now(timezone.utc)
     return dt.strftime("%d/%m/%Y %H:%M")
+
+
+def _format_national_address(address: str) -> str:
+    if not address:
+        return ""
+    # Look for 4 letters followed by optional space/dash and 4 numbers
+    match = re.search(r'([A-Za-z]{4})[\s\-]*(\d{4})', address)
+    if match:
+        return f"{match.group(1).upper()}{match.group(2)}"
+    return ""
 
 
 def build_sheets_row(
@@ -118,7 +129,7 @@ def build_sheets_row(
         "utm_campaign":    order.utm_campaign or "",
         "utm_term":        order.utm_term or "",
         "utm_content":     order.utm_content or "",
-        "national_address": customer_address,
+        "national_address": _format_national_address(customer_address),
         "spend":           "",
         "orders":          "",
         "cpl":             "",
@@ -240,7 +251,7 @@ async def send_rejected_attempt_to_sheets(
             "utm_campaign":    utm.campaign if utm else "",
             "utm_term":        utm.term if utm else "",
             "utm_content":     utm.content if utm else "",
-            "national_address": req.customer.address or "",
+            "national_address": _format_national_address(req.customer.address or ""),
             "spend":           "",
             "orders":          "",
             "cpl":             "",

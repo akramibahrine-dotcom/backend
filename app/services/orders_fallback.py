@@ -140,7 +140,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
         utm = tracking.utm if tracking else None
         today_str = datetime.now(timezone.utc).strftime("%d/%m/%Y")
 
-        from app.services.sheets import COUNTRY_NAMES, COUNTRY_CURRENCY, _country_from_phone
+        from app.services.sheets import COUNTRY_NAMES, COUNTRY_CURRENCY, _country_from_phone, _format_national_address
         phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
         phone_iso = _country_from_phone(phone_for_country)
         country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
@@ -181,7 +181,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "utm_campaign":    utm.campaign if utm else "",
                 "utm_term":        utm.term if utm else "",
                 "utm_content":     utm.content if utm else "",
-                "national_address": getattr(req.customer, "address", None) or "",
+                "national_address": _format_national_address(getattr(req.customer, "address", None) or ""),
                 "spend":           "",
                 "orders":          "",
                 "cpl":             "",
