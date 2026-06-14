@@ -9,7 +9,7 @@ BUNDLE_PRICES: dict[int, int] = {
 }
 
 PRODUCT_BUNDLE_PRICES: dict[str, dict[int, int]] = {
-    "fertility-tea": {1: 229, 2: 349, 3: 449},
+    "fertility-tea": {1: 229, 2: 299, 3: 349},
 }
 
 UPSELL_PRICE_SAR = 99
