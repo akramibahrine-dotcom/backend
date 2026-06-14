@@ -35,6 +35,12 @@ class TestValidateBundlePrice:
     def test_valid_3_pieces(self):
         assert validate_bundle_price("liver-wellness-tea", 3, 349) is True
 
+    def test_valid_fertility_tea_prices(self):
+        assert validate_bundle_price("fertility-tea", 1, 229) is True
+        assert validate_bundle_price("fertility-tea", 2, 349) is True
+        assert validate_bundle_price("fertility-tea", 3, 449) is True
+        assert validate_bundle_price("fertility-tea", 1, 299) is False
+
     def test_tampered_price_rejected(self):
         assert validate_bundle_price("weight-support-tea", 1, 1) is False
         assert validate_bundle_price("weight-support-tea", 2, 199) is False
