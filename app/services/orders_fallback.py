@@ -53,43 +53,52 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
             detail={"error": "invalid_phone", "message": "اكتبي رقم جوال صحيح لإكمال الطلب."},
         )
 
-    # Country gate also enforced in the DB-fallback path
+    # Country gate also enforced in the DB-fallback path.
+    # If phone belongs to an allowed country, trust it (handles VPN users).
     if not is_test:
         from app.services import sheets as sheets_svc
         import asyncio as _asyncio
         allowed_countries = settings.get_allowed_countries()
         ip_iso = await geoip_svc.lookup_country(client_ip)
         phone_iso = phone_result[3] if phone_result else None
+        phone_is_allowed = phone_iso and phone_iso in allowed_countries
+
         if allowed_countries and ip_iso and ip_iso not in allowed_countries:
-            _asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
-                req=req,
-                client_ip=client_ip,
-                phone_e164=phone_result[0] if phone_result else req.customer.phone,
-                fraud_reason=f"country_not_allowed_geoip:{ip_iso}",
-                country_iso=ip_iso,
-            ))
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "order_rejected",
-                    "message": "عذرًا، الطلبات غير متاحة في بلدك حاليًا.",
-                },
-            )
+            if phone_is_allowed:
+                pass  # VPN user with valid GCC phone — allow
+            else:
+                _asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                    req=req,
+                    client_ip=client_ip,
+                    phone_e164=phone_result[0] if phone_result else req.customer.phone,
+                    fraud_reason=f"country_not_allowed_geoip:{ip_iso}",
+                    country_iso=ip_iso,
+                ))
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "order_rejected",
+                        "message": "عذرًا، لا يمكن إتمام الطلب حاليًا. يرجى المحاولة لاحقًا أو التواصل معنا عبر واتساب.",
+                    },
+                )
         if ip_iso and phone_iso and ip_iso != phone_iso:
-            _asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
-                req=req,
-                client_ip=client_ip,
-                phone_e164=phone_result[0] if phone_result else req.customer.phone,
-                fraud_reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso}",
-                country_iso=ip_iso,
-            ))
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "order_rejected",
-                    "message": "رقم الجوال لا يتطابق مع بلد الاتصال.",
-                },
-            )
+            if phone_is_allowed:
+                pass  # VPN user with valid GCC phone — allow
+            else:
+                _asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                    req=req,
+                    client_ip=client_ip,
+                    phone_e164=phone_result[0] if phone_result else req.customer.phone,
+                    fraud_reason=f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso}",
+                    country_iso=ip_iso,
+                ))
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "order_rejected",
+                        "message": "عذرًا، لا يمكن إتمام الطلب حاليًا. يرجى المحاولة لاحقًا أو التواصل معنا عبر واتساب.",
+                    },
+                )
 
     # Basic price validation
     welcome_codes = {c.strip() for c in settings.welcome_promo_codes.split(",") if c.strip()}
@@ -141,6 +150,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
         today_str = datetime.now(timezone.utc).strftime("%d/%m/%Y")
 
         from app.services.sheets import COUNTRY_NAMES, COUNTRY_CURRENCY, _country_from_phone, _format_national_address
+        from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
         phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
         phone_iso = _country_from_phone(phone_for_country)
         country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
@@ -161,6 +171,17 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 names.append(up.name_ar)
                 qtys.append("1")
 
+        traffic_platform = derive_traffic_platform(
+            utm_source=utm.source if utm else None,
+            utm_medium=utm.medium if utm else None,
+            landing_page_url=tracking.landing_page_url if tracking else None,
+            page_url=tracking.page_url if tracking else None,
+            ttclid=tracking.ttclid if tracking else None,
+            fbc=tracking.fbc if tracking else None,
+            sc_click_id=tracking.sc_click_id if tracking else None,
+        )
+        utm_source = (utm.source if utm else None) or platform_to_utm_source(traffic_platform)
+
         payload = {
             "order": {
                 "order_id":        public_number,
@@ -176,7 +197,8 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "price":           float(total_sar),
                 "currency":        currency,
                 "notes":           f"FALLBACK - DB unavailable. IP: {client_ip}",
-                "utm_source":      utm.source if utm else "",
+                "traffic_platform": traffic_platform,
+                "utm_source":      utm_source,
                 "utm_medium":      utm.medium if utm else "",
                 "utm_campaign":    utm.campaign if utm else "",
                 "utm_term":        utm.term if utm else "",

@@ -13,6 +13,7 @@ from app.core.logging import get_logger
 from app.models.order import Order, OrderItem
 from app.schemas.order import CreateOrderRequest
 from app.services.products import get_product
+from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
 
 logger = get_logger(__name__)
 
@@ -73,6 +74,10 @@ def build_sheets_row(
     items: list[OrderItem],
     country_iso: str | None,
     customer_address: str = "",
+    *,
+    ttclid: str | None = None,
+    fbc: str | None = None,
+    sc_click_id: str | None = None,
 ) -> dict:
     """Build the flat dict that maps 1-to-1 to the Google Sheet columns."""
     # Derive country from phone first, fall back to IP-based ISO
@@ -110,6 +115,17 @@ def build_sheets_row(
     # URL: prefer landing page, fall back to page_url
     url = order.landing_page_url or order.page_url or ""
 
+    traffic_platform = derive_traffic_platform(
+        utm_source=order.utm_source,
+        utm_medium=order.utm_medium,
+        landing_page_url=order.landing_page_url,
+        page_url=order.page_url,
+        ttclid=ttclid,
+        fbc=fbc,
+        sc_click_id=sc_click_id,
+    )
+    utm_source = order.utm_source or platform_to_utm_source(traffic_platform)
+
     return {
         "order_id":        order.public_order_number,
         "date":            _format_date(order.created_at),
@@ -124,7 +140,8 @@ def build_sheets_row(
         "price":           price,
         "currency":        currency,
         "notes":           "",
-        "utm_source":      order.utm_source or "",
+        "traffic_platform": traffic_platform,
+        "utm_source":      utm_source,
         "utm_medium":      order.utm_medium or "",
         "utm_campaign":    order.utm_campaign or "",
         "utm_term":        order.utm_term or "",
@@ -147,6 +164,9 @@ async def send_to_sheets(
     ip_risk: float | None,
     is_vpn_proxy: str = "",
     customer_address: str = "",
+    ttclid: str | None = None,
+    fbc: str | None = None,
+    sc_click_id: str | None = None,
 ) -> dict:
     """
     Forward order to Google Sheets webhook.
@@ -164,6 +184,9 @@ async def send_to_sheets(
             items=items,
             country_iso=country_iso,
             customer_address=customer_address,
+            ttclid=ttclid,
+            fbc=fbc,
+            sc_click_id=sc_click_id,
         ),
     }
 
@@ -230,6 +253,16 @@ async def send_rejected_attempt_to_sheets(
     tracking = req.tracking
     utm = tracking.utm if tracking else None
     url = (tracking.landing_page_url or tracking.page_url or "") if tracking else ""
+    traffic_platform = derive_traffic_platform(
+        utm_source=utm.source if utm else None,
+        utm_medium=utm.medium if utm else None,
+        landing_page_url=tracking.landing_page_url if tracking else None,
+        page_url=tracking.page_url if tracking else None,
+        ttclid=tracking.ttclid if tracking else None,
+        fbc=tracking.fbc if tracking else None,
+        sc_click_id=tracking.sc_click_id if tracking else None,
+    )
+    utm_source = (utm.source if utm else None) or platform_to_utm_source(traffic_platform)
 
     payload = {
         "order": {
@@ -246,7 +279,8 @@ async def send_rejected_attempt_to_sheets(
             "price":           float(req.pricing.total_sar),
             "currency":        currency,
             "notes":           f"REJECTED - {fraud_reason} - IP: {client_ip}",
-            "utm_source":      utm.source if utm else "",
+            "traffic_platform": traffic_platform,
+            "utm_source":      utm_source,
             "utm_medium":      utm.medium if utm else "",
             "utm_campaign":    utm.campaign if utm else "",
             "utm_term":        utm.term if utm else "",

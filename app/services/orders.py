@@ -192,72 +192,90 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
 
     # Always-on country gate (works even if MaxMind is down/unconfigured).
     # Skipped only for the whitelisted test phone.
+    # If the phone belongs to an allowed country, we trust it (handles VPN users).
     allowed_countries = settings.get_allowed_countries()
     ip_iso_fallback = None if is_test else await geoip_svc.lookup_country(client_ip)
+    phone_is_allowed = phone_iso and phone_iso in allowed_countries
 
     if not is_test and allowed_countries:
         if ip_iso_fallback and ip_iso_fallback not in allowed_countries:
-            logger.warning(
-                "country_not_allowed_geoip",
-                ip=client_ip,
-                ip_iso=ip_iso_fallback,
-            )
-            reason = f"country_not_allowed_geoip:{ip_iso_fallback}"
-            fraud_check_record = FraudCheck(
-                phone_e164_masked=mask_phone(phone_e164),
-                ip_address=client_ip,
-                decision="rejected",
-                reason=reason,
-                country_iso_code=ip_iso_fallback,
-            )
-            db.add(fraud_check_record)
-            await db.commit()
-            asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
-                req=req,
-                client_ip=client_ip,
-                phone_e164=phone_e164,
-                fraud_reason=reason,
-                country_iso=ip_iso_fallback,
-            ))
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "order_rejected",
-                    "message": "عذرًا، الطلبات غير متاحة في بلدك حاليًا. تواصلي معنا إذا كان هذا خطأ.",
-                },
-            )
+            if phone_is_allowed:
+                logger.info(
+                    "vpn_bypass_phone_trusted",
+                    ip=client_ip,
+                    ip_iso=ip_iso_fallback,
+                    phone_iso=phone_iso,
+                )
+            else:
+                logger.warning(
+                    "country_not_allowed_geoip",
+                    ip=client_ip,
+                    ip_iso=ip_iso_fallback,
+                )
+                reason = f"country_not_allowed_geoip:{ip_iso_fallback}"
+                fraud_check_record = FraudCheck(
+                    phone_e164_masked=mask_phone(phone_e164),
+                    ip_address=client_ip,
+                    decision="rejected",
+                    reason=reason,
+                    country_iso_code=ip_iso_fallback,
+                )
+                db.add(fraud_check_record)
+                await db.commit()
+                asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                    req=req,
+                    client_ip=client_ip,
+                    phone_e164=phone_e164,
+                    fraud_reason=reason,
+                    country_iso=ip_iso_fallback,
+                ))
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "order_rejected",
+                        "message": "عذرًا، لا يمكن إتمام الطلب حاليًا. يرجى المحاولة لاحقًا أو التواصل معنا عبر واتساب.",
+                    },
+                )
 
         if ip_iso_fallback and phone_iso and ip_iso_fallback != phone_iso:
-            logger.warning(
-                "phone_ip_country_mismatch_geoip",
-                phone_iso=phone_iso,
-                ip_iso=ip_iso_fallback,
-                ip=client_ip,
-            )
-            reason = f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso_fallback}"
-            fraud_check_record = FraudCheck(
-                phone_e164_masked=mask_phone(phone_e164),
-                ip_address=client_ip,
-                decision="rejected",
-                reason=reason,
-                country_iso_code=ip_iso_fallback,
-            )
-            db.add(fraud_check_record)
-            await db.commit()
-            asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
-                req=req,
-                client_ip=client_ip,
-                phone_e164=phone_e164,
-                fraud_reason=reason,
-                country_iso=ip_iso_fallback,
-            ))
-            raise HTTPException(
-                status_code=403,
-                detail={
-                    "error": "order_rejected",
-                    "message": "رقم الجوال لا يتطابق مع بلد الاتصال. إذا كان هذا خطأ تواصلي معنا.",
-                },
-            )
+            if phone_is_allowed:
+                logger.info(
+                    "phone_ip_mismatch_but_phone_allowed",
+                    phone_iso=phone_iso,
+                    ip_iso=ip_iso_fallback,
+                    ip=client_ip,
+                )
+            else:
+                logger.warning(
+                    "phone_ip_country_mismatch_geoip",
+                    phone_iso=phone_iso,
+                    ip_iso=ip_iso_fallback,
+                    ip=client_ip,
+                )
+                reason = f"phone_ip_country_mismatch:{phone_iso}_vs_{ip_iso_fallback}"
+                fraud_check_record = FraudCheck(
+                    phone_e164_masked=mask_phone(phone_e164),
+                    ip_address=client_ip,
+                    decision="rejected",
+                    reason=reason,
+                    country_iso_code=ip_iso_fallback,
+                )
+                db.add(fraud_check_record)
+                await db.commit()
+                asyncio.create_task(sheets_svc.send_rejected_attempt_to_sheets(
+                    req=req,
+                    client_ip=client_ip,
+                    phone_e164=phone_e164,
+                    fraud_reason=reason,
+                    country_iso=ip_iso_fallback,
+                ))
+                raise HTTPException(
+                    status_code=403,
+                    detail={
+                        "error": "order_rejected",
+                        "message": "عذرًا، لا يمكن إتمام الطلب حاليًا. يرجى المحاولة لاحقًا أو التواصل معنا عبر واتساب.",
+                    },
+                )
 
     # MaxMind layer: VPN / proxy / Tor / risk score (independent of basic country gate)
     fraud_result = await maxmind_svc.check_fraud(
@@ -303,13 +321,13 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
     effective_ip_iso = fraud_result.country_iso_code or ip_iso_fallback
     
     if not is_test and allowed_countries:
-        if not effective_ip_iso:
+        if not effective_ip_iso and not phone_is_allowed:
             logger.warning("country_resolution_failed_blocking", ip=client_ip)
             raise HTTPException(
                 status_code=403,
                 detail={
                     "error": "order_rejected",
-                    "message": "عذرًا، لم نتمكن من التحقق من بلد الاتصال. يرجى التأكد من عدم استخدام بروكسي أو المحاولة لاحقًا.",
+                    "message": "عذرًا، لا يمكن إتمام الطلب حاليًا. يرجى إيقاف الـ VPN والمحاولة مرة أخرى، أو التواصل معنا عبر واتساب.",
                 },
             )
             
@@ -318,6 +336,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         and phone_iso
         and effective_ip_iso
         and effective_ip_iso != phone_iso
+        and not phone_is_allowed
     ):
         logger.warning(
             "phone_ip_country_mismatch",
@@ -352,7 +371,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             status_code=403,
             detail={
                 "error": "order_rejected",
-                "message": "رقم الجوال لا يتطابق مع بلد الاتصال. إذا كان هذا خطأ تواصلي معنا.",
+                "message": "عذرًا، لا يمكن إتمام الطلب حاليًا. يرجى المحاولة لاحقًا أو التواصل معنا عبر واتساب.",
             },
         )
 
@@ -544,6 +563,9 @@ async def _fire_post_order_tasks(
             ip_risk=fraud_result.ip_risk,
             is_vpn_proxy=_detect_vpn_proxy_label(fraud_result),
             customer_address=customer_address,
+            ttclid=capi_payload.ttclid,
+            fbc=capi_payload.fbc,
+            sc_click_id=capi_payload.sc_click_id,
         )
         wd = WebhookDelivery(
             order_id=order.id,
