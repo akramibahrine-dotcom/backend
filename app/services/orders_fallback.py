@@ -147,14 +147,25 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
     if settings.google_sheets_webhook_url:
         tracking = req.tracking
         utm = tracking.utm if tracking else None
-        today_str = datetime.now(timezone.utc).strftime("%d/%m/%Y")
+        today_str = _format_date(datetime.now(timezone.utc))
 
-        from app.services.sheets import COUNTRY_NAMES, COUNTRY_CURRENCY, _country_from_phone, _format_national_address
+        from app.services.sheets import (
+            COUNTRY_NAMES,
+            COUNTRY_CURRENCY,
+            _country_from_phone,
+            _format_date,
+            _format_national_address,
+        )
         from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
         phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
         phone_iso = _country_from_phone(phone_for_country)
         country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
         currency = req.pricing.currency or COUNTRY_CURRENCY.get(phone_iso, "SAR")
+        display_price = (
+            float(req.pricing.display_total)
+            if req.pricing.display_total is not None and currency != "SAR"
+            else float(total_sar)
+        )
 
         skus = []
         names = []
@@ -194,7 +205,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "sku":             "/".join(skus),
                 "product":         "/".join(names),
                 "quantity":        "/".join(qtys),
-                "price":           float(total_sar),
+                "price":           display_price,
                 "currency":        currency,
                 "notes":           f"FALLBACK - DB unavailable. IP: {client_ip}",
                 "traffic_platform": traffic_platform,

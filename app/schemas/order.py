@@ -29,6 +29,7 @@ class PricingInput(BaseModel):
     shipping_sar: int = Field(default=0, ge=0)
     total_sar: int = Field(..., ge=0)
     currency: str = "SAR"
+    display_total: float | None = None
 
 
 class UTMData(BaseModel):

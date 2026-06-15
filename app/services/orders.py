@@ -22,6 +22,7 @@ from app.schemas.tracking import CAPIContent, CAPIOrderPayload
 from app.services import geoip as geoip_svc
 from app.services import maxmind as maxmind_svc
 from app.services import sheets as sheets_svc
+from app.services.currency import convert_sar_to, get_exchange_rates
 from app.services.products import (
     get_product,
     validate_bundle_price,
@@ -385,6 +386,16 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
 
     utm = tracking.utm if hasattr(tracking, "utm") and tracking.utm else None
 
+    display_currency: str | None = None
+    display_total: float | None = None
+    if req.pricing.currency and req.pricing.currency != "SAR":
+        display_currency = req.pricing.currency
+        if req.pricing.display_total is not None:
+            display_total = req.pricing.display_total
+        else:
+            rates = await get_exchange_rates()
+            display_total = convert_sar_to(expected_total, req.pricing.currency, rates)
+
     order = Order(
         public_order_number=public_number,
         status="pending_confirmation",
@@ -395,7 +406,8 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         subtotal_sar=expected_total - shipping,
         shipping_sar=shipping,
         total_sar=expected_total,
-        display_currency=req.pricing.currency if req.pricing.currency != "SAR" else None,
+        display_currency=display_currency,
+        display_total=display_total,
         ip_address=client_ip,
         user_agent=user_agent,
         purchase_event_id=tracking.purchase_event_id,

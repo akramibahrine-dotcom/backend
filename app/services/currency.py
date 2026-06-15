@@ -48,6 +48,37 @@ FALLBACK_RATES: dict[str, float] = {
 }
 
 
+CURRENCY_FRACTION_DIGITS: dict[str, int] = {
+    "JPY": 0,
+    "IQD": 0,
+    "LBP": 0,
+    "SDG": 0,
+    "YER": 0,
+    "SYP": 0,
+    "IDR": 0,
+}
+
+
+def convert_sar_to(
+    amount_sar: int | float,
+    target_currency: str,
+    rates: dict[str, float],
+) -> float:
+    """Convert a SAR amount to the customer's display currency."""
+    if target_currency == "SAR":
+        return float(amount_sar)
+
+    rate = rates.get(target_currency)
+    if not rate:
+        return float(amount_sar)
+
+    converted = float(amount_sar) * rate
+    digits = CURRENCY_FRACTION_DIGITS.get(target_currency, 2)
+    if digits == 0:
+        return float(round(converted))
+    return round(converted, 2)
+
+
 async def get_exchange_rates() -> dict[str, float]:
     """
     Returns SAR-based exchange rates dict.

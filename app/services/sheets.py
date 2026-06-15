@@ -3,7 +3,8 @@ from __future__ import annotations
 import random
 import re
 import string
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 import httpx
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -14,8 +15,15 @@ from app.models.order import Order, OrderItem
 from app.schemas.order import CreateOrderRequest
 from app.services.products import get_product
 from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
+from app.services.currency import FALLBACK_RATES, convert_sar_to
 
 logger = get_logger(__name__)
+
+try:
+    KSA_TZ = ZoneInfo("Asia/Riyadh")
+except Exception:
+    KSA_TZ = timezone(timedelta(hours=3))
+SHEETS_DATE_FORMAT = "%d/%m/%Y %H:%M:%S"
 
 # ISO country code → Arabic country name
 COUNTRY_NAMES: dict[str, str] = {
@@ -54,9 +62,13 @@ def _country_from_phone(phone_e164: str) -> str:
 
 
 def _format_date(dt: datetime | None) -> str:
+    """Format order timestamp for Google Sheets (Saudi local time with seconds)."""
     if not dt:
         dt = datetime.now(timezone.utc)
-    return dt.strftime("%d/%m/%Y %H:%M")
+    elif dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    local = dt.astimezone(KSA_TZ)
+    return local.strftime(SHEETS_DATE_FORMAT)
 
 
 def _format_national_address(address: str) -> str:
@@ -93,11 +105,12 @@ def build_sheets_row(
     )
 
     # Total price in display currency
-    price = (
-        float(order.display_total)
-        if order.display_total
-        else float(order.total_sar)
-    )
+    if order.display_total:
+        price = float(order.display_total)
+    elif currency != "SAR":
+        price = convert_sar_to(float(order.total_sar), currency, FALLBACK_RATES)
+    else:
+        price = float(order.total_sar)
 
     # Products / SKUs / quantities as slash-joined strings
     skus: list[str] = []
@@ -235,6 +248,11 @@ async def send_rejected_attempt_to_sheets(
     effective_iso = phone_iso or country_iso or ""
     country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
     currency = req.pricing.currency or COUNTRY_CURRENCY.get(effective_iso, "SAR")
+    price = (
+        float(req.pricing.display_total)
+        if req.pricing.display_total is not None and currency != "SAR"
+        else float(req.pricing.total_sar)
+    )
 
     # Build product/sku/qty strings from request items
     skus: list[str] = []
@@ -267,7 +285,7 @@ async def send_rejected_attempt_to_sheets(
     payload = {
         "order": {
             "order_id":        public_number,
-            "date":            datetime.now(timezone.utc).strftime("%d/%m/%Y %H:%M"),
+            "date":            _format_date(datetime.now(timezone.utc)),
             "country":         country_name,
             "name":            req.customer.name,
             "phone":           phone_e164 or req.customer.phone,
@@ -276,7 +294,7 @@ async def send_rejected_attempt_to_sheets(
             "sku":             "/".join(skus),
             "product":         "/".join(product_names),
             "quantity":        "/".join(quantities),
-            "price":           float(req.pricing.total_sar),
+            "price":           price,
             "currency":        currency,
             "notes":           f"REJECTED - {fraud_reason} - IP: {client_ip}",
             "traffic_platform": traffic_platform,
