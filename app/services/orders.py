@@ -27,7 +27,6 @@ from app.services.products import (
     get_product,
     validate_bundle_price,
     validate_upsell,
-    discounted_amount,
 )
 from app.services.tracking import meta as meta_svc
 from app.services.tracking import snapchat as snap_svc
@@ -119,6 +118,8 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         existing_order = existing.scalar_one_or_none()
         if existing_order:
             logger.info("order_idempotent_reuse", order_id=existing_order.id)
+            if not existing_order.purchase_event_id:
+                logger.warning("idempotent_order_missing_purchase_event_id", order_id=existing_order.id)
             return CreateOrderResponse(
                 order_id=existing_order.id,
                 public_order_number=existing_order.public_order_number,
@@ -126,6 +127,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
                 total_sar=existing_order.total_sar,
                 is_test_order=existing_order.is_test_order,
                 thank_you_url=f"{settings.frontend_base_url}/thank-you/{existing_order.id}",
+                purchase_event_id=existing_order.purchase_event_id or req.tracking.purchase_event_id,
             )
 
     welcome_codes = {c.strip() for c in settings.welcome_promo_codes.split(",") if c.strip()}
@@ -182,7 +184,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
             ))
 
     shipping = req.pricing.shipping_sar
-    expected_items_total = discounted_amount(items_total) if welcome_active else items_total
+    expected_items_total = items_total
     expected_total = expected_items_total + upsell_total + shipping
 
     if req.pricing.total_sar != expected_total:
@@ -378,13 +380,9 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
 
     # Create order
     public_number = await generate_public_order_number(db)
-    tracking = req.tracking or type("T", (), {
-        "purchase_event_id": None, "fbp": None, "fbc": None,
-        "ttp": None, "ttclid": None, "sc_click_id": None, "sc_cookie1": None,
-        "landing_page_url": None, "page_url": None, "utm": None,
-    })()
+    tracking = req.tracking
 
-    utm = tracking.utm if hasattr(tracking, "utm") and tracking.utm else None
+    utm = tracking.utm if tracking.utm else None
 
     display_currency: str | None = None
     display_total: float | None = None
@@ -467,7 +465,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
     # Fire CAPI and Sheets async (non-blocking for order response)
     capi_payload = CAPIOrderPayload(
         order_id=order.id,
-        event_id=tracking.purchase_event_id or order.id,
+        event_id=tracking.purchase_event_id,
         total_sar=float(expected_total),
         contents=[
             CAPIContent(id=oi.product_id, quantity=oi.quantity, item_price=oi.bundle_price_sar)
@@ -476,13 +474,13 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         phone_e164=phone_e164,
         ip_address=client_ip,
         user_agent=user_agent,
-        fbp=tracking.fbp if hasattr(tracking, "fbp") else None,
-        fbc=tracking.fbc if hasattr(tracking, "fbc") else None,
-        ttp=tracking.ttp if hasattr(tracking, "ttp") else None,
-        ttclid=tracking.ttclid if hasattr(tracking, "ttclid") else None,
-        sc_click_id=tracking.sc_click_id if hasattr(tracking, "sc_click_id") else None,
-        sc_cookie1=tracking.sc_cookie1 if hasattr(tracking, "sc_cookie1") else None,
-        event_source_url=tracking.page_url if hasattr(tracking, "page_url") else None,
+        fbp=tracking.fbp,
+        fbc=tracking.fbc,
+        ttp=tracking.ttp,
+        ttclid=tracking.ttclid,
+        sc_click_id=tracking.sc_click_id,
+        sc_cookie1=tracking.sc_cookie1,
+        event_source_url=tracking.page_url,
         is_test=order.is_test_order,
     )
 
@@ -504,6 +502,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
         total_sar=expected_total,
         is_test_order=order.is_test_order,
         thank_you_url=f"{settings.frontend_base_url}/thank-you/{order.id}",
+        purchase_event_id=tracking.purchase_event_id,
     )
 
 

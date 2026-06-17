@@ -41,7 +41,7 @@ class UTMData(BaseModel):
 
 
 class TrackingInput(BaseModel):
-    purchase_event_id: str | None = None
+    purchase_event_id: str = Field(..., min_length=8, max_length=100)
     initiate_checkout_event_id: str | None = None
     fbp: str | None = None
     fbc: str | None = None
@@ -60,7 +60,7 @@ class CreateOrderRequest(BaseModel):
     items: list[OrderItemInput] = Field(..., min_length=1)
     upsell: UpsellInput | None = None
     pricing: PricingInput
-    tracking: TrackingInput | None = None
+    tracking: TrackingInput
     idempotency_key: str | None = None
 
     @field_validator("items")
@@ -93,6 +93,7 @@ class CreateOrderResponse(BaseModel):
     total_sar: int
     is_test_order: bool
     thank_you_url: str
+    purchase_event_id: str
 
 
 class ValidateOrderResponse(BaseModel):

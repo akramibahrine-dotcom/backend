@@ -137,6 +137,12 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
 
     total_sar = items_total + upsell_total + req.pricing.shipping_sar
 
+    if req.pricing.total_sar != total_sar:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "total_mismatch", "message": "إجمالي الطلب غير صحيح."},
+        )
+
     # Generate synthetic order ID
     order_id = str(uuid.uuid4())
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
@@ -145,10 +151,6 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
 
     # Send to Google Sheets as the primary record
     if settings.google_sheets_webhook_url:
-        tracking = req.tracking
-        utm = tracking.utm if tracking else None
-        today_str = _format_date(datetime.now(timezone.utc))
-
         from app.services.sheets import (
             COUNTRY_NAMES,
             COUNTRY_CURRENCY,
@@ -157,6 +159,10 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
             _format_national_address,
         )
         from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
+
+        tracking = req.tracking
+        utm = tracking.utm if tracking else None
+        today_str = _format_date(datetime.now(timezone.utc))
         phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
         phone_iso = _country_from_phone(phone_for_country)
         country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
@@ -250,4 +256,5 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
         total_sar=total_sar,
         is_test_order=is_test,
         thank_you_url=f"{settings.frontend_base_url}/thank-you/{order_id}",
+        purchase_event_id=req.tracking.purchase_event_id,
     )

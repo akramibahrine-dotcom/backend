@@ -53,12 +53,14 @@ async def send_purchase_event(payload: CAPIOrderPayload) -> dict:
                 "user_data": user_data,
                 "custom_data": {
                     "currency": "SAR",
-                    "value": payload.total_sar,
+                    "value": float(payload.total_sar),
                     "contents": [
-                        {"id": c.id, "quantity": c.quantity, "item_price": c.item_price}
+                        {"id": c.id, "quantity": c.quantity, "item_price": float(c.item_price)}
                         for c in payload.contents
                     ],
                     "content_type": "product",
+                    "content_ids": [c.id for c in payload.contents],
+                    "num_items": sum(c.quantity for c in payload.contents),
                     "order_id": payload.order_id,
                 },
             }

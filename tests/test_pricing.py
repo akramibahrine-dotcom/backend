@@ -115,3 +115,36 @@ class TestWelcomeFlagDoesNotChangeValidatedPrices:
 
     def test_catalog_upsell_ok_with_welcome_flag(self):
         assert validate_upsell("colon-comfort-tea", ["weight-support-tea"], 99, welcome_discount=True) is True
+
+
+class TestMetaPurchaseDedup:
+    def test_capi_payload_uses_purchase_event_id_not_order_id(self):
+        from app.schemas.tracking import CAPIContent, CAPIOrderPayload
+
+        purchase_event_id = "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+        order_id = "different-order-uuid"
+        payload = CAPIOrderPayload(
+            order_id=order_id,
+            event_id=purchase_event_id,
+            total_sar=349.0,
+            contents=[CAPIContent(id="fertility-tea", quantity=2, item_price=349.0)],
+            phone_e164="+966501234567",
+            ip_address="1.2.3.4",
+            user_agent="test",
+        )
+        assert payload.event_id == purchase_event_id
+        assert payload.event_id != order_id
+
+    def test_fertility_bundle_prices(self):
+        from app.services.products import PRODUCT_BUNDLE_PRICES
+
+        assert PRODUCT_BUNDLE_PRICES["fertility-tea"] == {1: 229, 2: 349, 3: 449}
+
+    def test_valid_fertility_prices(self):
+        assert validate_bundle_price("fertility-tea", 1, 229) is True
+        assert validate_bundle_price("fertility-tea", 2, 349) is True
+        assert validate_bundle_price("fertility-tea", 3, 449) is True
+
+    def test_stale_fertility_prices_rejected(self):
+        assert validate_bundle_price("fertility-tea", 2, 299) is False
+        assert validate_bundle_price("fertility-tea", 3, 349) is False
