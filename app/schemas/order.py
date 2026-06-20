@@ -13,7 +13,7 @@ class CustomerInput(BaseModel):
 
 class OrderItemInput(BaseModel):
     product_id: str = Field(..., min_length=1, max_length=100)
-    quantity: Literal[1, 2, 3]
+    quantity: int = Field(..., ge=1, le=10)
     bundle_price_sar: int = Field(..., gt=0)
     source: Literal["product_page", "cart_cross_sell", "checkout_upsell"] = "product_page"
 
