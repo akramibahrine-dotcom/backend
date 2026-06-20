@@ -123,7 +123,7 @@ PRODUCTS: dict[str, ProductInfo] = {
     "scar-gel": ProductInfo(
         product_id="scar-gel",
         name_ar="جل السيليكون الأمريكي لعلاج الندوب والحروق",
-        sku="BAYT-SCG-002",
+        sku="CopAkramGeL!",
         slug="scar-gel",
         concern_ar="علاج الندوب والحروق وآثار العمليات",
         upsell_product_id="axis-y-serum",
