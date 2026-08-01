@@ -31,7 +31,7 @@ async def check_fraud(
     wl_raw = settings.test_phone_whitelist.strip()
     wl_digits = wl_raw.lstrip("+").lstrip("0")
     phone_digits = phone_e164.lstrip("+").lstrip("0")
-    if phone_digits.endswith(wl_digits) or wl_digits.endswith(phone_digits):
+    if wl_digits and (phone_digits.endswith(wl_digits) or wl_digits.endswith(phone_digits)):
         logger.info("fraud_check_whitelist", phone=mask_phone(phone_e164))
         return FraudDecision(
             allowed=True,

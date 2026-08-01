@@ -11,6 +11,7 @@ BUNDLE_PRICES: dict[int, int] = {
 PRODUCT_BUNDLE_PRICES: dict[str, dict[int, int]] = {
     "fertility-tea": {1: 229, 2: 349, 3: 449},
     "scar-gel": {1: 179, 3: 199, 5: 249},
+    "eelhoe-fresh-breath": {1: 129, 2: 199, 3: 249},
 }
 
 UPSELL_PRICE_SAR = 99
@@ -33,6 +34,7 @@ UPSELL_MAP: dict[str, str] = {
     "fertility-tea": "axis-y-serum",
     "axis-y-serum": "weight-support-tea",
     "scar-gel": "axis-y-serum",
+    "eelhoe-fresh-breath": "axis-y-serum",
 }
 
 
@@ -128,6 +130,15 @@ PRODUCTS: dict[str, ProductInfo] = {
         concern_ar="علاج الندوب والحروق وآثار العمليات",
         upsell_product_id="axis-y-serum",
         cross_sell_product_ids=("axis-y-serum", "fertility-tea"),
+    ),
+    "eelhoe-fresh-breath": ProductInfo(
+        product_id="eelhoe-fresh-breath",
+        name_ar="إكسير EELHOE لعلاج رائحة الفم الكريهة",
+        sku="BAYT-EEL-001",
+        slug="eelhoe-fresh-breath",
+        concern_ar="علاج رائحة الفم الكريهة",
+        upsell_product_id="axis-y-serum",
+        cross_sell_product_ids=("axis-y-serum", "scar-gel"),
     ),
 }
 

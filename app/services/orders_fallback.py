@@ -44,7 +44,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
     wl_digits = settings.test_phone_whitelist.strip().lstrip("+").lstrip("0")
     cleaned_digits = cleaned.lstrip("+").lstrip("0")
     is_test = cleaned == settings.test_phone_whitelist.strip() or (
-        cleaned_digits.endswith(wl_digits) or wl_digits.endswith(cleaned_digits)
+        wl_digits and (cleaned_digits.endswith(wl_digits) or wl_digits.endswith(cleaned_digits))
     )
     phone_result = normalize_phone(cleaned)
     if not phone_result and not is_test:
