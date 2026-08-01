@@ -148,3 +148,22 @@ class TestMetaPurchaseDedup:
     def test_stale_fertility_prices_rejected(self):
         assert validate_bundle_price("fertility-tea", 2, 299) is False
         assert validate_bundle_price("fertility-tea", 3, 349) is False
+
+    def test_c60_product_exists_with_own_prices(self):
+        from app.services.products import PRODUCT_BUNDLE_PRICES, get_product
+
+        product = get_product("c60-fullerene-serum")
+        assert product is not None
+        assert PRODUCT_BUNDLE_PRICES["c60-fullerene-serum"] == {1: 199, 2: 279, 3: 349}
+        assert validate_bundle_price("c60-fullerene-serum", 1, 199) is True
+        assert validate_bundle_price("c60-fullerene-serum", 2, 279) is True
+        assert validate_bundle_price("c60-fullerene-serum", 3, 349) is True
+
+    def test_scar_gel_does_not_accept_default_bundle_qty2(self):
+        # Scar gel has 1/3/5 — never borrow default tea qty=2 price
+        assert validate_bundle_price("scar-gel", 2, 279) is False
+        assert validate_bundle_price("scar-gel", 5, 249) is True
+
+    def test_eelhoe_keeps_own_prices(self):
+        assert validate_bundle_price("eelhoe-fresh-breath", 1, 129) is True
+        assert validate_bundle_price("eelhoe-fresh-breath", 1, 199) is False
