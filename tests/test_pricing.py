@@ -154,10 +154,13 @@ class TestMetaPurchaseDedup:
 
         product = get_product("c60-fullerene-serum")
         assert product is not None
-        assert PRODUCT_BUNDLE_PRICES["c60-fullerene-serum"] == {1: 199, 2: 279, 3: 349}
-        assert validate_bundle_price("c60-fullerene-serum", 1, 199) is True
-        assert validate_bundle_price("c60-fullerene-serum", 2, 279) is True
-        assert validate_bundle_price("c60-fullerene-serum", 3, 349) is True
+        # Quantities are total boxes shipped (BOGO)
+        assert PRODUCT_BUNDLE_PRICES["c60-fullerene-serum"] == {2: 199, 4: 279, 6: 349}
+        assert validate_bundle_price("c60-fullerene-serum", 2, 199) is True
+        assert validate_bundle_price("c60-fullerene-serum", 4, 279) is True
+        assert validate_bundle_price("c60-fullerene-serum", 6, 349) is True
+        assert validate_bundle_price("c60-fullerene-serum", 1, 199) is False
+        assert validate_bundle_price("c60-fullerene-serum", 3, 349) is False
 
     def test_scar_gel_does_not_accept_default_bundle_qty2(self):
         # Scar gel has 1/3/5 — never borrow default tea qty=2 price

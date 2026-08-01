@@ -12,7 +12,8 @@ PRODUCT_BUNDLE_PRICES: dict[str, dict[int, int]] = {
     "fertility-tea": {1: 229, 2: 349, 3: 449},
     "scar-gel": {1: 179, 3: 199, 5: 249},
     "eelhoe-fresh-breath": {1: 129, 2: 199, 3: 249},
-    "c60-fullerene-serum": {1: 199, 2: 279, 3: 349},
+    # BOGO totals: 1+1 free → 2 boxes, 2+2 → 4, 3+3 → 6
+    "c60-fullerene-serum": {2: 199, 4: 279, 6: 349},
 }
 
 UPSELL_PRICE_SAR = 99
