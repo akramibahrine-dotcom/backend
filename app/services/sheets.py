@@ -15,7 +15,7 @@ from app.models.order import Order, OrderItem
 from app.schemas.order import CreateOrderRequest
 from app.services.products import get_display_line_price, get_product
 from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
-from app.services.currency import FALLBACK_RATES, convert_sar_to
+from app.services.currency import FALLBACK_RATES
 
 SHEETS_SEP = ";"
 
