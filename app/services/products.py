@@ -28,6 +28,11 @@ PRODUCT_PRICE_OVERRIDES: dict[str, dict[int, dict[str, float]]] = {
         2: {"OMR": 21},
         3: {"OMR": 29},
     },
+    "eelhoe-fresh-breath": {
+        1: {"OMR": 13},
+        2: {"OMR": 21},
+        3: {"OMR": 29},
+    },
 }
 
 UPSELL_PRICE_SAR = 99
