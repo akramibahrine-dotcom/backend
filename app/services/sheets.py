@@ -338,11 +338,30 @@ async def send_rejected_attempt_to_sheets(
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(min=1, max=8), reraise=True)
 async def _post_to_sheets(url: str, payload: dict) -> dict:
-    async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-        response = await client.post(
-            url,
-            json=payload,
-            headers={"Content-Type": "application/json"},
-        )
+    """
+    Google Apps Script web apps often 302-redirect. Following with GET drops the body
+    and doPost never runs — so we re-POST to the redirect Location ourselves.
+    """
+    headers = {"Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+        response = await client.post(url, json=payload, headers=headers)
+
+        if response.status_code in (301, 302, 303, 307, 308):
+            location = response.headers.get("Location")
+            if not location:
+                response.raise_for_status()
+            response = await client.post(location, json=payload, headers=headers)
+
+        if response.status_code == 403:
+            raise RuntimeError(
+                "Google Sheets webhook returned 403 Access Denied. "
+                "Re-deploy the Apps Script Web App with access: Anyone "
+                "(Execute as: Me), then update GOOGLE_SHEETS_WEBHOOK_URL."
+            )
+
         response.raise_for_status()
-        return response.json()
+        try:
+            return response.json()
+        except Exception:
+            text = (response.text or "")[:300]
+            raise RuntimeError(f"Sheets webhook non-JSON response: {text}")

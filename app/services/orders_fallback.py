@@ -199,6 +199,11 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
         )
         utm_source = (utm.source if utm else None) or platform_to_utm_source(traffic_platform)
 
+        product_ids = list(dict.fromkeys(item.product_id for item in req.items))
+        if req.upsell and req.upsell.accepted and req.upsell.product_id:
+            if req.upsell.product_id not in product_ids:
+                product_ids.append(req.upsell.product_id)
+
         payload = {
             "order": {
                 "order_id":        public_number,
@@ -225,6 +230,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "orders":          "",
                 "cpl":             "",
                 "status":          "pending_confirmation",
+                "product_ids":     "/".join(product_ids),
             },
         }
         try:
