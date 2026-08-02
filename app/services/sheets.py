@@ -191,17 +191,20 @@ async def send_to_sheets(
         logger.warning("sheets_webhook_not_configured")
         return {"status": "skipped", "reason": "not_configured"}
 
-    payload = {
-        "order": build_sheets_row(
-            order=order,
-            items=items,
-            country_iso=country_iso,
-            customer_address=customer_address,
-            ttclid=ttclid,
-            fbc=fbc,
-            sc_click_id=sc_click_id,
-        ),
-    }
+    order_row = build_sheets_row(
+        order=order,
+        items=items,
+        country_iso=country_iso,
+        customer_address=customer_address,
+        ttclid=ttclid,
+        fbc=fbc,
+        sc_click_id=sc_click_id,
+    )
+    # Explicit product IDs so the webhook can write principal sheet → product sheet
+    order_row["product_ids"] = "/".join(
+        list(dict.fromkeys(item.product_id for item in items))
+    )
+    payload = {"order": order_row}
 
     try:
         result = await _post_to_sheets(
@@ -282,6 +285,7 @@ async def send_rejected_attempt_to_sheets(
     )
     utm_source = (utm.source if utm else None) or platform_to_utm_source(traffic_platform)
 
+    product_ids = list(dict.fromkeys(item.product_id for item in req.items))
     payload = {
         "order": {
             "order_id":        public_number,
@@ -308,6 +312,7 @@ async def send_rejected_attempt_to_sheets(
             "orders":          "",
             "cpl":             "",
             "status":          "rejected",
+            "product_ids":     "/".join(product_ids),
         },
     }
 

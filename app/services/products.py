@@ -146,7 +146,7 @@ PRODUCTS: dict[str, ProductInfo] = {
     "c60-fullerene-serum": ProductInfo(
         product_id="c60-fullerene-serum",
         name_ar="كبسولات سيروم فوليرين C60 متعددة المفعول",
-        sku="BAYT-C60-001",
+        sku="CopaffFullereneSerum",
         slug="c60-fullerene-serum",
         concern_ar="تجديد البشرة ومكافحة التجاعيد والبقع الداكنة",
         upsell_product_id="axis-y-serum",
