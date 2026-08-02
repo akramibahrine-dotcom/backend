@@ -37,6 +37,7 @@ def discounted_amount(amount: int) -> int:
 
 UPSELL_MAP: dict[str, str] = {
     "weight-support-tea": "colon-comfort-tea",
+    "bloom-coffee": "weight-support-tea",
     "colon-comfort-tea": "liver-wellness-tea",
     "hemorrhoid-comfort-tea": "colon-comfort-tea",
     "liver-wellness-tea": "weight-support-tea",
@@ -70,6 +71,15 @@ PRODUCTS: dict[str, ProductInfo] = {
         concern_ar="مرافقة إدارة الوزن",
         upsell_product_id="colon-comfort-tea",
         cross_sell_product_ids=("colon-comfort-tea", "liver-wellness-tea"),
+    ),
+    "bloom-coffee": ProductInfo(
+        product_id="bloom-coffee",
+        name_ar="قهوة بلوم لفقدان الوزن وصحة الجهاز الهضمي",
+        sku="BAYT-BLM-001",
+        slug="bloom-coffee",
+        concern_ar="فقدان الوزن وصحة الجهاز الهضمي",
+        upsell_product_id="weight-support-tea",
+        cross_sell_product_ids=("weight-support-tea", "colon-comfort-tea"),
     ),
     "colon-comfort-tea": ProductInfo(
         product_id="colon-comfort-tea",

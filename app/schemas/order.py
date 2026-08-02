@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 class CustomerInput(BaseModel):
-    name: str = Field(..., min_length=2, max_length=80)
+    name: str = Field(default="", max_length=80)
     phone: str = Field(..., min_length=7, max_length=20)
     address: str | None = Field(None, max_length=500)
 

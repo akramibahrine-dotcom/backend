@@ -397,7 +397,7 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
     order = Order(
         public_order_number=public_number,
         status="pending_confirmation",
-        customer_name=req.customer.name,
+        customer_name=req.customer.name or "",
         customer_phone_e164=phone_e164,
         customer_phone_local=phone_local,
         is_test_order=is_test or fraud_result.is_test,

@@ -25,7 +25,8 @@ try:
     KSA_TZ = ZoneInfo("Asia/Riyadh")
 except Exception:
     KSA_TZ = timezone(timedelta(hours=3))
-SHEETS_DATE_FORMAT = "%d/%m/%Y %H:%M:%S"
+# All Orders style: 2026-08-02 / 03h57min27s /
+SHEETS_DATE_FORMAT = "%Y-%m-%d / %Hh%Mmin%Ss /"
 
 # ISO country code → Arabic country name
 COUNTRY_NAMES: dict[str, str] = {
@@ -88,6 +89,11 @@ def _format_amount(amount: float) -> str:
     if float(amount).is_integer():
         return str(int(amount))
     return f"{amount:.2f}".rstrip("0").rstrip(".")
+
+
+def _format_phone_for_sheets(phone: str) -> str:
+    """Sheets phone cells must not include a leading '+'."""
+    return (phone or "").strip().lstrip("+")
 
 
 def build_sheets_row(
@@ -154,8 +160,9 @@ def build_sheets_row(
         "date":            _format_date(order.created_at),
         "country":         country_name,
         "name":            order.customer_name,
-        "phone":           order.customer_phone_e164,
-        "city":            "",  # not collected yet — reserved for principal sheet
+        "phone":           _format_phone_for_sheets(order.customer_phone_e164),
+        # City column on All Orders = full address (duplicated with Full Address)
+        "city":            customer_address,
         "address":         customer_address,
         "url":             url,
         "sku":             SHEETS_SEP.join(skus),
@@ -310,8 +317,8 @@ async def send_rejected_attempt_to_sheets(
             "date":            _format_date(datetime.now(timezone.utc)),
             "country":         country_name,
             "name":            req.customer.name,
-            "phone":           phone_e164 or req.customer.phone,
-            "city":            "",
+            "phone":           _format_phone_for_sheets(phone_e164 or req.customer.phone),
+            "city":            req.customer.address or "",
             "address":         req.customer.address or "",
             "url":             url,
             "sku":             SHEETS_SEP.join(skus),
