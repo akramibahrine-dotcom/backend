@@ -179,7 +179,7 @@ PRODUCTS: dict[str, ProductInfo] = {
         slug="c60-fullerene-serum",
         concern_ar="تجديد البشرة ومكافحة التجاعيد والبقع الداكنة",
         upsell_product_id="axis-y-serum",
-        cross_sell_product_ids=("bloom-coffee", "axis-y-serum"),
+        cross_sell_product_ids=("eelhoe-fresh-breath", "bloom-coffee"),
     ),
 }
 
