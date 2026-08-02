@@ -16,6 +16,15 @@ PRODUCT_BUNDLE_PRICES: dict[str, dict[int, int]] = {
     "c60-fullerene-serum": {2: 199, 4: 279, 6: 349},
 }
 
+# Fixed display prices per currency (not FX conversion) — qty → currency → amount
+PRODUCT_PRICE_OVERRIDES: dict[str, dict[int, dict[str, float]]] = {
+    "c60-fullerene-serum": {
+        2: {"OMR": 21},
+        4: {"OMR": 29},
+        6: {"OMR": 39},
+    },
+}
+
 UPSELL_PRICE_SAR = 99
 
 WELCOME_DISCOUNT_PERCENT = 10
@@ -172,6 +181,22 @@ def validate_bundle_price(
         return False
     expected = prices[quantity]
     return price_sar == expected
+
+
+def get_display_line_price(
+    product_id: str,
+    quantity: int,
+    price_sar: int | float,
+    currency: str,
+    rates: dict[str, float],
+) -> float:
+    """Per-line price in customer currency (override first, else convert SAR)."""
+    from app.services.currency import convert_sar_to
+
+    override = PRODUCT_PRICE_OVERRIDES.get(product_id, {}).get(quantity, {}).get(currency)
+    if override is not None:
+        return float(override)
+    return convert_sar_to(price_sar, currency, rates)
 
 
 def validate_upsell(

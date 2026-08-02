@@ -13,9 +13,11 @@ from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.models.order import Order, OrderItem
 from app.schemas.order import CreateOrderRequest
-from app.services.products import get_product
+from app.services.products import get_display_line_price, get_product
 from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
 from app.services.currency import FALLBACK_RATES, convert_sar_to
+
+SHEETS_SEP = ";"
 
 logger = get_logger(__name__)
 
@@ -81,6 +83,13 @@ def _format_national_address(address: str) -> str:
     return ""
 
 
+def _format_amount(amount: float) -> str:
+    """Stable string for sheet cells (drop trailing .0 for whole numbers)."""
+    if float(amount).is_integer():
+        return str(int(amount))
+    return f"{amount:.2f}".rstrip("0").rstrip(".")
+
+
 def build_sheets_row(
     order: Order,
     items: list[OrderItem],
@@ -104,18 +113,11 @@ def build_sheets_row(
         or COUNTRY_CURRENCY.get(effective_iso, "SAR")
     )
 
-    # Total price in display currency
-    if order.display_total:
-        price = float(order.display_total)
-    elif currency != "SAR":
-        price = convert_sar_to(float(order.total_sar), currency, FALLBACK_RATES)
-    else:
-        price = float(order.total_sar)
-
-    # Products / SKUs / quantities as slash-joined strings
+    # Multi-product leads: sku1;sku2 / qty1;qty2 / price1;price2 — same currency
     skus: list[str] = []
     product_names: list[str] = []
     quantities: list[str] = []
+    line_prices: list[str] = []
 
     for item in items:
         product_info = get_product(item.product_id)
@@ -124,6 +126,14 @@ def build_sheets_row(
             product_info.name_ar if product_info else item.product_id
         )
         quantities.append(str(item.quantity))
+        line_amount = get_display_line_price(
+            item.product_id,
+            item.quantity,
+            item.bundle_price_sar,
+            currency,
+            FALLBACK_RATES,
+        )
+        line_prices.append(_format_amount(line_amount))
 
     # URL: prefer landing page, fall back to page_url
     url = order.landing_page_url or order.page_url or ""
@@ -148,10 +158,10 @@ def build_sheets_row(
         "city":            "",  # not collected yet — reserved for principal sheet
         "address":         customer_address,
         "url":             url,
-        "sku":             "/".join(skus),
-        "product":         "/".join(product_names),
-        "quantity":        "/".join(quantities),
-        "price":           price,
+        "sku":             SHEETS_SEP.join(skus),
+        "product":         SHEETS_SEP.join(product_names),
+        "quantity":        SHEETS_SEP.join(quantities),
+        "price":           SHEETS_SEP.join(line_prices),
         "currency":        currency,
         "notes":           "",
         "traffic_platform": traffic_platform,
@@ -202,7 +212,7 @@ async def send_to_sheets(
         sc_click_id=sc_click_id,
     )
     # Explicit product IDs so the webhook can write principal sheet → product sheet
-    order_row["product_ids"] = "/".join(
+    order_row["product_ids"] = SHEETS_SEP.join(
         list(dict.fromkeys(item.product_id for item in items))
     )
     payload = {"order": order_row}
@@ -252,21 +262,28 @@ async def send_rejected_attempt_to_sheets(
     effective_iso = phone_iso or country_iso or ""
     country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
     currency = req.pricing.currency or COUNTRY_CURRENCY.get(effective_iso, "SAR")
-    price = (
-        float(req.pricing.display_total)
-        if req.pricing.display_total is not None and currency != "SAR"
-        else float(req.pricing.total_sar)
-    )
 
-    # Build product/sku/qty strings from request items
+    # Multi-product: sku1;sku2 / qty1;qty2 / price1;price2
     skus: list[str] = []
     product_names: list[str] = []
     quantities: list[str] = []
+    line_prices: list[str] = []
     for item in req.items:
         product_info = get_product(item.product_id)
         skus.append(product_info.sku if product_info else item.product_id)
         product_names.append(product_info.name_ar if product_info else item.product_id)
         quantities.append(str(item.quantity))
+        line_prices.append(
+            _format_amount(
+                get_display_line_price(
+                    item.product_id,
+                    item.quantity,
+                    item.bundle_price_sar,
+                    currency,
+                    FALLBACK_RATES,
+                )
+            )
+        )
 
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     suffix = "".join(random.choices(string.digits, k=4))
@@ -297,10 +314,10 @@ async def send_rejected_attempt_to_sheets(
             "city":            "",
             "address":         req.customer.address or "",
             "url":             url,
-            "sku":             "/".join(skus),
-            "product":         "/".join(product_names),
-            "quantity":        "/".join(quantities),
-            "price":           price,
+            "sku":             SHEETS_SEP.join(skus),
+            "product":         SHEETS_SEP.join(product_names),
+            "quantity":        SHEETS_SEP.join(quantities),
+            "price":           SHEETS_SEP.join(line_prices),
             "currency":        currency,
             "notes":           f"REJECTED - {fraud_reason} - IP: {client_ip}",
             "traffic_platform": traffic_platform,
@@ -314,7 +331,7 @@ async def send_rejected_attempt_to_sheets(
             "orders":          "",
             "cpl":             "",
             "status":          "rejected",
-            "product_ids":     "/".join(product_ids),
+            "product_ids":     SHEETS_SEP.join(product_ids),
         },
     }
 

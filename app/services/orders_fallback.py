@@ -173,20 +173,48 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
             else float(total_sar)
         )
 
+        from app.services.products import UPSELL_PRICE_SAR, get_display_line_price
+        from app.services.sheets import SHEETS_SEP, _format_amount
+        from app.services.currency import FALLBACK_RATES
+
         skus = []
         names = []
         qtys = []
+        line_prices = []
         for item in req.items:
             p = get_product(item.product_id)
             skus.append(p.sku if p else item.product_id)
             names.append(p.name_ar if p else item.product_id)
             qtys.append(str(item.quantity))
+            line_prices.append(
+                _format_amount(
+                    get_display_line_price(
+                        item.product_id,
+                        item.quantity,
+                        item.bundle_price_sar,
+                        currency,
+                        FALLBACK_RATES,
+                    )
+                )
+            )
         if req.upsell and req.upsell.accepted and req.upsell.product_id:
             up = get_product(req.upsell.product_id)
             if up:
                 skus.append(up.sku)
                 names.append(up.name_ar)
                 qtys.append("1")
+                upsell_sar = req.upsell.price_sar or UPSELL_PRICE_SAR
+                line_prices.append(
+                    _format_amount(
+                        get_display_line_price(
+                            req.upsell.product_id,
+                            1,
+                            upsell_sar,
+                            currency,
+                            FALLBACK_RATES,
+                        )
+                    )
+                )
 
         traffic_platform = derive_traffic_platform(
             utm_source=utm.source if utm else None,
@@ -214,10 +242,10 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "city":            "",
                 "address":         getattr(req.customer, "address", None) or "",
                 "url":             (tracking.landing_page_url or tracking.page_url or "") if tracking else "",
-                "sku":             "/".join(skus),
-                "product":         "/".join(names),
-                "quantity":        "/".join(qtys),
-                "price":           display_price,
+                "sku":             SHEETS_SEP.join(skus),
+                "product":         SHEETS_SEP.join(names),
+                "quantity":        SHEETS_SEP.join(qtys),
+                "price":           SHEETS_SEP.join(line_prices),
                 "currency":        currency,
                 "notes":           f"FALLBACK - DB unavailable. IP: {client_ip}",
                 "traffic_platform": traffic_platform,
@@ -231,7 +259,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "orders":          "",
                 "cpl":             "",
                 "status":          "pending_confirmation",
-                "product_ids":     "/".join(product_ids),
+                "product_ids":     SHEETS_SEP.join(product_ids),
             },
         }
         try:
