@@ -145,6 +145,7 @@ def build_sheets_row(
         "country":         country_name,
         "name":            order.customer_name,
         "phone":           order.customer_phone_e164,
+        "city":            "",  # not collected yet — reserved for principal sheet
         "address":         customer_address,
         "url":             url,
         "sku":             "/".join(skus),
@@ -293,6 +294,7 @@ async def send_rejected_attempt_to_sheets(
             "country":         country_name,
             "name":            req.customer.name,
             "phone":           phone_e164 or req.customer.phone,
+            "city":            "",
             "address":         req.customer.address or "",
             "url":             url,
             "sku":             "/".join(skus),

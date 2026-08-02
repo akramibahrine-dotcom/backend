@@ -211,6 +211,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
                 "country":         country_name,
                 "name":            req.customer.name,
                 "phone":           phone_for_country,
+                "city":            "",
                 "address":         getattr(req.customer, "address", None) or "",
                 "url":             (tracking.landing_page_url or tracking.page_url or "") if tracking else "",
                 "sku":             "/".join(skus),
