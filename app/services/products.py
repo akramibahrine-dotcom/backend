@@ -85,7 +85,7 @@ PRODUCTS: dict[str, ProductInfo] = {
     "bloom-coffee": ProductInfo(
         product_id="bloom-coffee",
         name_ar="قهوة بلوم لفقدان الوزن وصحة الجهاز الهضمي",
-        sku="BAYT-BLM-001",
+        sku="CopAffCoffeeBloom",
         slug="bloom-coffee",
         concern_ar="فقدان الوزن وصحة الجهاز الهضمي",
         upsell_product_id="weight-support-tea",
@@ -166,7 +166,7 @@ PRODUCTS: dict[str, ProductInfo] = {
     "eelhoe-fresh-breath": ProductInfo(
         product_id="eelhoe-fresh-breath",
         name_ar="إكسير EELHOE لعلاج رائحة الفم الكريهة",
-        sku="BAYT-EEL-001",
+        sku="CopAffFreshBreath",
         slug="eelhoe-fresh-breath",
         concern_ar="علاج رائحة الفم الكريهة",
         upsell_product_id="axis-y-serum",
