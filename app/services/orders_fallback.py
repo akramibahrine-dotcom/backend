@@ -153,10 +153,10 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
     if settings.google_sheets_webhook_url:
         from app.services.sheets import (
             COUNTRY_NAMES,
-            COUNTRY_CURRENCY,
             _country_from_phone,
             _format_date,
             _format_national_address,
+            resolve_lead_currency,
         )
         from app.services.traffic_source import derive_traffic_platform, platform_to_utm_source
 
@@ -166,12 +166,7 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
         phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
         phone_iso = _country_from_phone(phone_for_country)
         country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
-        currency = req.pricing.currency or COUNTRY_CURRENCY.get(phone_iso, "SAR")
-        display_price = (
-            float(req.pricing.display_total)
-            if req.pricing.display_total is not None and currency != "SAR"
-            else float(total_sar)
-        )
+        currency = resolve_lead_currency(phone_for_country, req.pricing.currency, phone_iso)
 
         from app.services.products import UPSELL_PRICE_SAR, get_display_line_price
         from app.services.sheets import SHEETS_SEP, _format_amount

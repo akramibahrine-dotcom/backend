@@ -22,8 +22,10 @@ from app.schemas.tracking import CAPIContent, CAPIOrderPayload
 from app.services import geoip as geoip_svc
 from app.services import maxmind as maxmind_svc
 from app.services import sheets as sheets_svc
-from app.services.currency import convert_sar_to, get_exchange_rates
+from app.services.currency import get_exchange_rates
 from app.services.products import (
+    UPSELL_PRICE_SAR,
+    get_display_line_price,
     get_product,
     validate_bundle_price,
     validate_upsell,
@@ -384,15 +386,37 @@ async def create_order(req: CreateOrderRequest, request: Request, db: AsyncSessi
 
     utm = tracking.utm if tracking.utm else None
 
+    # Amounts are recorded in the lead's own currency (fixed per-country prices
+    # where we set them), not the SAR the storefront posts.
+    lead_currency = sheets_svc.resolve_lead_currency(
+        phone_e164,
+        req.pricing.currency,
+        effective_ip_iso,
+    )
     display_currency: str | None = None
     display_total: float | None = None
-    if req.pricing.currency and req.pricing.currency != "SAR":
-        display_currency = req.pricing.currency
-        if req.pricing.display_total is not None:
-            display_total = req.pricing.display_total
-        else:
-            rates = await get_exchange_rates()
-            display_total = convert_sar_to(expected_total, req.pricing.currency, rates)
+    if lead_currency != "SAR":
+        rates = await get_exchange_rates()
+        display_currency = lead_currency
+        display_total = sum(
+            get_display_line_price(
+                item.product_id,
+                item.quantity,
+                item.bundle_price_sar,
+                lead_currency,
+                rates,
+            )
+            for item in req.items
+        )
+        if req.upsell and req.upsell.accepted and req.upsell.product_id:
+            display_total += get_display_line_price(
+                req.upsell.product_id,
+                1,
+                req.upsell.price_sar or UPSELL_PRICE_SAR,
+                lead_currency,
+                rates,
+            )
+        display_total = round(display_total, 2)
 
     order = Order(
         public_order_number=public_number,

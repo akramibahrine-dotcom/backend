@@ -64,6 +64,22 @@ def _country_from_phone(phone_e164: str) -> str:
     return ""
 
 
+def resolve_lead_currency(
+    phone_e164: str,
+    requested_currency: str | None = None,
+    country_iso: str | None = None,
+) -> str:
+    """
+    Currency the lead actually pays in.
+
+    The storefront may post SAR regardless of what the shopper saw, so the lead's
+    own country (phone first, then IP) decides; the requested value is only a
+    fallback for countries we don't map.
+    """
+    iso = _country_from_phone(phone_e164) or (country_iso or "")
+    return COUNTRY_CURRENCY.get(iso) or requested_currency or "SAR"
+
+
 def _format_date(dt: datetime | None) -> str:
     """Format order timestamp for Google Sheets (Saudi local time with seconds)."""
     if not dt:
@@ -113,10 +129,10 @@ def build_sheets_row(
 
     country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
 
-    # Currency: use display_currency if set, else derive from country, else SAR
-    currency = (
-        order.display_currency
-        or COUNTRY_CURRENCY.get(effective_iso, "SAR")
+    currency = resolve_lead_currency(
+        order.customer_phone_e164,
+        order.display_currency,
+        effective_iso,
     )
 
     # Multi-product leads: sku1;sku2 / qty1;qty2 / price1;price2 — same currency
@@ -268,7 +284,7 @@ async def send_rejected_attempt_to_sheets(
             break
     effective_iso = phone_iso or country_iso or ""
     country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
-    currency = req.pricing.currency or COUNTRY_CURRENCY.get(effective_iso, "SAR")
+    currency = resolve_lead_currency(phone_e164, req.pricing.currency, effective_iso)
 
     # Multi-product: sku1;sku2 / qty1;qty2 / price1;price2
     skus: list[str] = []
