@@ -53,13 +53,15 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
             detail={"error": "invalid_phone", "message": "اكتبي رقم جوال صحيح لإكمال الطلب."},
         )
 
+    # Geo-lookup for country gate and sheets row (always needed)
+    ip_iso = await geoip_svc.lookup_country(client_ip)
+
     # Country gate also enforced in the DB-fallback path.
     # If phone belongs to an allowed country, trust it (handles VPN users).
     if not is_test:
         from app.services import sheets as sheets_svc
         import asyncio as _asyncio
         allowed_countries = settings.get_allowed_countries()
-        ip_iso = await geoip_svc.lookup_country(client_ip)
         phone_iso = phone_result[3] if phone_result else None
         phone_is_allowed = phone_iso and phone_iso in allowed_countries
 
@@ -164,9 +166,10 @@ async def create_order_fallback(req: CreateOrderRequest, request: Request) -> Cr
         utm = tracking.utm if tracking else None
         today_str = _format_date(datetime.now(timezone.utc))
         phone_for_country = (phone_result[0] if phone_result else req.customer.phone)
-        phone_iso = _country_from_phone(phone_for_country)
-        country_name = COUNTRY_NAMES.get(phone_iso, phone_iso)
-        currency = resolve_lead_currency(phone_for_country, req.pricing.currency, phone_iso)
+        phone_iso_sheets = _country_from_phone(phone_for_country)
+        effective_iso = ip_iso or phone_iso_sheets or ""
+        country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
+        currency = resolve_lead_currency(phone_for_country, req.pricing.currency, effective_iso)
 
         from app.services.products import UPSELL_PRICE_SAR, get_display_line_price
         from app.services.sheets import SHEETS_SEP, _format_amount

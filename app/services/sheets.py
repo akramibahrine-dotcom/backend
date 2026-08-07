@@ -72,11 +72,11 @@ def resolve_lead_currency(
     """
     Currency the lead actually pays in.
 
-    The storefront may post SAR regardless of what the shopper saw, so the lead's
-    own country (phone first, then IP) decides; the requested value is only a
-    fallback for countries we don't map.
+    IP/geo country takes priority because it reflects the customer's actual
+    location (and delivery destination).  Phone country is only a fallback
+    when IP detection is unavailable.
     """
-    iso = _country_from_phone(phone_e164) or (country_iso or "")
+    iso = (country_iso or "") or _country_from_phone(phone_e164)
     return COUNTRY_CURRENCY.get(iso) or requested_currency or "SAR"
 
 
@@ -123,9 +123,9 @@ def build_sheets_row(
     sc_click_id: str | None = None,
 ) -> dict:
     """Build the flat dict that maps 1-to-1 to the Google Sheet columns."""
-    # Derive country from phone first, fall back to IP-based ISO
+    # IP/geo country reflects the customer's actual location; phone is fallback
     phone_iso = _country_from_phone(order.customer_phone_e164)
-    effective_iso = phone_iso or country_iso or ""
+    effective_iso = country_iso or phone_iso or ""
 
     country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
 
@@ -282,7 +282,7 @@ async def send_rejected_attempt_to_sheets(
         if pattern.match(phone_e164):
             phone_iso = iso
             break
-    effective_iso = phone_iso or country_iso or ""
+    effective_iso = country_iso or phone_iso or ""
     country_name = COUNTRY_NAMES.get(effective_iso, effective_iso)
     currency = resolve_lead_currency(phone_e164, req.pricing.currency, effective_iso)
 

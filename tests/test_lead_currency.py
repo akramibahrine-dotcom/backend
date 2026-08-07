@@ -1,4 +1,4 @@
-"""Sheet amounts must follow the lead's own country, never the storefront default."""
+"""Sheet amounts must follow the lead's actual location (IP), not the phone prefix."""
 from __future__ import annotations
 
 import pytest
@@ -21,9 +21,13 @@ class TestResolveLeadCurrency:
             ("+218911234567", "LYD"),
         ],
     )
-    def test_phone_country_decides(self, phone: str, expected: str):
-        # Storefront posts SAR for everyone; the lead's country must win.
+    def test_phone_country_fallback_when_no_ip(self, phone: str, expected: str):
+        # No IP country → phone country decides.
         assert resolve_lead_currency(phone, "SAR") == expected
+
+    def test_ip_country_overrides_phone_country(self):
+        # Saudi phone from Oman IP → must show OMR (delivery in Oman).
+        assert resolve_lead_currency("+966501234567", "SAR", "OM") == "OMR"
 
     def test_ip_country_used_when_phone_unrecognized(self):
         assert resolve_lead_currency("+33612345678", "SAR", "OM") == "OMR"
